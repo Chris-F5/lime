@@ -1,0 +1,127 @@
+#include <stdio.h>
+#include <stdlib.h>
+
+#include <GLFW/glfw3.h>
+#include <vulkan/vulkan.h>
+
+#include "obj_storage.h"
+#include "vk_device.h"
+#include "utils.h"
+#include "renderer.h"
+#include "camera.h"
+
+const uint32_t WIDTH = 800;
+const uint32_t HEIGHT = 600;
+
+void glfwErrorCallback(int _, const char* errorString)
+{
+    printf("Exiting because of GLFW error: '%s'\n", errorString);
+    exit(1);
+}
+
+static VkExtent2D choosePresentExtent(
+    GLFWwindow* window,
+    VkSurfaceCapabilitiesKHR surfaceCapabilities)
+{
+    if (surfaceCapabilities.currentExtent.width != UINT32_MAX) {
+        return surfaceCapabilities.currentExtent;
+    } else {
+        int width, height;
+        glfwGetFramebufferSize(window, &width, &height);
+
+        VkExtent2D extent;
+
+        extent.width = MIN(
+            surfaceCapabilities.maxImageExtent.width,
+            MAX(
+                width,
+                surfaceCapabilities.maxImageExtent.width));
+        extent.height = MIN(
+            surfaceCapabilities.maxImageExtent.height,
+            MAX(
+                height,
+                surfaceCapabilities.maxImageExtent.height));
+
+        return extent;
+    }
+}
+
+int main()
+{
+    glfwSetErrorCallback(glfwErrorCallback);
+    glfwInit();
+
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
+    GLFWwindow* window = glfwCreateWindow(
+        WIDTH,
+        HEIGHT,
+        "Vulkan App",
+        NULL,
+        NULL);
+
+    VulkanDevice vkDevice;
+    VulkanDevice_init(&vkDevice, window);
+
+    VkExtent2D presentExtent = choosePresentExtent(
+        window,
+        vkDevice.physicalProperties.surfaceCapabilities);
+
+    ObjectStorage objStorage;
+    ObjectStorage_init(
+        &objStorage,
+        vkDevice.logical,
+        vkDevice.physical);
+    vec3 objPos = {1.0f, 1.0f, 10.0f};
+    ivec3 objSize = {5, 5, 5};
+    ObjRef objRef;
+    ObjectStorage_addObjects(
+        &objStorage,
+        vkDevice.logical,
+        1,
+        &objPos,
+        &objSize,
+        &objRef);
+
+    Renderer renderer;
+    Renderer_init(
+        &renderer,
+        &vkDevice,
+        presentExtent,
+        &objStorage);
+
+    float aspectRatio
+        = (float)renderer.presentExtent.width
+        / (float)renderer.presentExtent.height;
+    Camera camera;
+    Camera_init(&camera, aspectRatio);
+
+
+    while (!glfwWindowShouldClose(window)) {
+        glfwPollEvents();
+        Camera_userInput(&camera, window);
+
+        ObjectStorage_updateCamPos(
+            &objStorage,
+            vkDevice.logical,
+            camera.pos);
+
+        mat4 view, proj;
+        Camera_viewMat(&camera, view);
+        Camera_projMat(&camera, proj);
+
+        Renderer_drawFrame(
+            &renderer,
+            &vkDevice,
+            view,
+            proj);
+    }
+
+    vkDeviceWaitIdle(vkDevice.logical);
+
+    Renderer_destroy(&renderer, vkDevice.logical);
+    ObjectStorage_destroy(&objStorage, vkDevice.logical);
+    VulkanDevice_destroy(&vkDevice);
+
+    return 0;
+}
