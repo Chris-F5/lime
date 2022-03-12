@@ -12,6 +12,7 @@ typedef uint32_t ObjRef;
 
 typedef struct {
     vec4 pos;
+    uint32_t obj;
 } ObjectBackFaceVertex;
 
 typedef struct {

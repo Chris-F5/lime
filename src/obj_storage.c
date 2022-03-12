@@ -23,6 +23,7 @@ const static VkVertexInputBindingDescription BACK_FACE_VERT_BINDINGS[] = {
 
 const static VkVertexInputAttributeDescription BACK_FACE_VERT_INPUT_ATTRIBS[] = {
     { 0, 0, VK_FORMAT_R32G32B32A32_SFLOAT, offsetof(ObjectBackFaceVertex, pos) },
+    { 1, 0, VK_FORMAT_R32_UINT, offsetof(ObjectBackFaceVertex, obj) },
 };
 
 void getObjectBackFaceVertexInfo(
@@ -70,6 +71,7 @@ void ObjectStorage_init(
 }
 
 static void face6Verts(
+    ObjRef obj,
     vec3 position,
     ivec3 size,
     unsigned char faceBit,
@@ -98,6 +100,7 @@ static void face6Verts(
     for (uint32_t i = 0; i < 6; i++) {
         glm_vec3_copy(adjustedPosition, verts[i].pos);
         verts[i].pos[3] = 1.0;
+        verts[i].obj = obj;
     }
     verts[1 + adjusted].pos[(axis + 1) % 3] += size[(axis + 1) % 3];
     verts[2 - adjusted].pos[(axis + 2) % 3] += size[(axis + 2) % 3];
@@ -126,6 +129,7 @@ static unsigned char getBackFaceBits(vec3 camPos, vec3 position, ivec3 size)
 }
 
 static void objBackFacesVerts(
+    ObjRef obj,
     unsigned char backFaceBits,
     vec3 position,
     ivec3 size,
@@ -135,6 +139,7 @@ static void objBackFacesVerts(
     uint32_t c = 0;
     if (backFaceBits & FACE_XP_BIT) {
         face6Verts(
+            obj,
             position,
             size,
             FACE_XP_BIT,
@@ -143,6 +148,7 @@ static void objBackFacesVerts(
     }
     if (backFaceBits & FACE_XN_BIT) {
         face6Verts(
+            obj,
             position,
             size,
             FACE_XN_BIT,
@@ -151,6 +157,7 @@ static void objBackFacesVerts(
     }
     if (backFaceBits & FACE_YP_BIT) {
         face6Verts(
+            obj,
             position,
             size,
             FACE_YP_BIT,
@@ -159,6 +166,7 @@ static void objBackFacesVerts(
     }
     if (backFaceBits & FACE_YN_BIT) {
         face6Verts(
+            obj,
             position,
             size,
             FACE_YN_BIT,
@@ -167,6 +175,7 @@ static void objBackFacesVerts(
     }
     if (backFaceBits & FACE_ZP_BIT) {
         face6Verts(
+            obj,
             position,
             size,
             FACE_ZP_BIT,
@@ -175,6 +184,7 @@ static void objBackFacesVerts(
     }
     if (backFaceBits & FACE_ZN_BIT) {
         face6Verts(
+            obj,
             position,
             size,
             FACE_ZN_BIT,
@@ -235,6 +245,7 @@ void ObjectStorage_updateCamPos(
         if (newBackFaceBits != storage->backFaceBits[i]) {
             storage->backFaceBits[i] = newBackFaceBits;
             objBackFacesVerts(
+                i,
                 storage->backFaceBits[i],
                 storage->positions[i],
                 storage->sizes[i],
