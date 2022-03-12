@@ -4,11 +4,11 @@
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
 
-#include "obj_storage.h"
-#include "vk_device.h"
-#include "utils.h"
-#include "renderer.h"
 #include "camera.h"
+#include "obj_storage.h"
+#include "renderer.h"
+#include "utils.h"
+#include "vk_device.h"
 
 const uint32_t WIDTH = 800;
 const uint32_t HEIGHT = 600;
@@ -72,16 +72,30 @@ int main()
         &objStorage,
         vkDevice.logical,
         vkDevice.physical);
-    vec3 objPos = {1.0f, 1.0f, 10.0f};
-    ivec3 objSize = {5, 5, 5};
-    ObjRef objRef;
-    ObjectStorage_addObjects(
-        &objStorage,
-        vkDevice.logical,
-        1,
-        &objPos,
-        &objSize,
-        &objRef);
+    {
+        vec3 objPos = { 1.0f, 1.0f, 10.0f };
+        ivec3 objSize = { 5, 5, 5 };
+        ObjRef objRef;
+        ObjectStorage_addObjects(
+            &objStorage,
+            vkDevice.logical,
+            1,
+            &objPos,
+            &objSize,
+            &objRef);
+    }
+    {
+        vec3 objPos = { 4.0f, 3.0f, 8.0f };
+        ivec3 objSize = { 3, 2, 1 };
+        ObjRef objRef;
+        ObjectStorage_addObjects(
+            &objStorage,
+            vkDevice.logical,
+            1,
+            &objPos,
+            &objSize,
+            &objRef);
+    }
 
     Renderer renderer;
     Renderer_init(
@@ -95,7 +109,6 @@ int main()
         / (float)renderer.presentExtent.height;
     Camera camera;
     Camera_init(&camera, aspectRatio);
-
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();

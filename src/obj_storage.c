@@ -203,7 +203,7 @@ void ObjectStorage_addObjects(
         storage->sizes[objRefs[i]][0] = sizes[i][0];
         storage->sizes[objRefs[i]][1] = sizes[i][1];
         storage->sizes[objRefs[i]][2] = sizes[i][2];
-        storage->backFaceVertBufferOffsets[i]
+        storage->backFaceVertBufferOffsets[objRefs[i]]
             = objRefs[i] * MAX_OBJ_BACK_FACE_VERT_COUNT;
         storage->backFaceVertCounts[objRefs[i]] = 0;
         storage->backFaceBits[objRefs[i]] = 0;
@@ -239,7 +239,7 @@ void ObjectStorage_updateCamPos(
                 storage->positions[i],
                 storage->sizes[i],
                 &storage->backFaceVertCounts[i],
-                &verts[i * 18]);
+                &verts[i * MAX_OBJ_BACK_FACE_VERT_COUNT]);
         }
     }
     vkUnmapMemory(logicalDevice, storage->backFaceVertMemory);
