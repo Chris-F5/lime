@@ -79,21 +79,36 @@ static void createDepthImage(
     extent3D.height = extent.height;
     extent3D.depth = 1;
 
-    createImage(
+    VkImageCreateInfo imageCreateInfo;
+    imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageCreateInfo.pNext = NULL;
+    imageCreateInfo.flags = 0;
+    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageCreateInfo.format = depthImageFormat;
+    imageCreateInfo.extent = extent3D;
+    imageCreateInfo.mipLevels = 1;
+    imageCreateInfo.arrayLayers = 1;
+    imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageCreateInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageCreateInfo.queueFamilyIndexCount = 0;
+    imageCreateInfo.pQueueFamilyIndices = NULL;
+    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    handleVkResult(
+        vkCreateImage(
+            logicalDevice,
+            &imageCreateInfo,
+            NULL,
+            depthImage),
+        "creating depth image");
+
+    allocateImageMemory(
         logicalDevice,
         physicalDevice,
-        VK_IMAGE_TYPE_2D,
-        depthImageFormat,
-        extent3D,
-        0,
-        VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT,
-        1,
-        1,
-        VK_SAMPLE_COUNT_1_BIT,
-        VK_IMAGE_TILING_OPTIMAL,
-        false,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        depthImage,
+        *depthImage,
         depthImageMemory);
 
     VkImageSubresourceRange subresourceRange;
@@ -261,7 +276,7 @@ static void createPipeline(
         = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputInfo.pNext = NULL;
     vertexInputInfo.flags = 0;
-    getObjectBackFaceVertexInfo(
+    getObjectVertexInfo(
         &vertexInputInfo.vertexBindingDescriptionCount,
         &vertexInputInfo.pVertexBindingDescriptions,
         &vertexInputInfo.vertexAttributeDescriptionCount,
@@ -309,7 +324,7 @@ static void createPipeline(
     rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
     rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
     rasterizationInfo.cullMode = VK_CULL_MODE_BACK_BIT;
-    rasterizationInfo.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rasterizationInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
     rasterizationInfo.depthBiasEnable = VK_FALSE;
     rasterizationInfo.depthBiasConstantFactor = 0.0f;
     rasterizationInfo.depthBiasClamp = 0.0f;
@@ -435,7 +450,7 @@ static void createFramebuffers(
     }
 }
 
-static void createRenderCommandBuffers(
+static void recordRenderCommandBuffers(
     VkDevice logicalDevice,
     VkRenderPass renderPass,
     VkExtent2D presentExtent,
@@ -443,25 +458,12 @@ static void createRenderCommandBuffers(
     VkPipelineLayout objPipelineLayout,
     VkDescriptorSet* renderDescriptorSets,
     ObjectStorage* objStorage,
-    VkCommandPool pool,
     uint32_t swapLen,
     VkFramebuffer* framebuffers,
     VkCommandBuffer* commandBuffers)
 {
-    /* ALLOCATE COMMAND BUFFERS */
-    {
-        VkCommandBufferAllocateInfo allocInfo;
-        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfo.pNext = NULL;
-        allocInfo.commandPool = pool;
-        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandBufferCount = swapLen;
-
-        handleVkResult(
-            vkAllocateCommandBuffers(logicalDevice, &allocInfo, commandBuffers),
-            "allocating render command buffers");
-    }
-
+    for(int s = 0; s < swapLen; s++)
+        vkResetCommandBuffer(commandBuffers[s], 0);
     for (int s = 0; s < swapLen; s++) {
         /* BEGIN COMMAND BUFFER */
         VkCommandBufferBeginInfo beginInfo;
@@ -518,15 +520,24 @@ static void createRenderCommandBuffers(
             commandBuffers[s],
             0,
             1,
-            &objStorage->backFaceVertBuffer,
+            &objStorage->vertBuffer,
             voxTriVertexBufferOffsets);
 
         for (int o = 0; o < objStorage->filled; o++) {
+            vkCmdBindDescriptorSets(
+                commandBuffers[s],
+                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                objPipelineLayout,
+                1,
+                1,
+                &objStorage->descriptorSets[o],
+                0,
+                NULL);
             vkCmdDraw(
                 commandBuffers[s],
-                MAX_OBJ_BACK_FACE_VERT_COUNT,
+                MAX_OBJ_VERT_COUNT,
                 1,
-                objStorage->backFaceVertBufferOffsets[o],
+                objStorage->vertBufferOffsets[o],
                 0);
         }
 
@@ -542,9 +553,12 @@ static void createRenderCommandBuffers(
 void Renderer_init(
     Renderer* renderer,
     VulkanDevice* device,
-    VkExtent2D presentExtent,
-    ObjectStorage* objStorage)
+    VkExtent2D presentExtent)
 {
+    ObjectStorage_init(
+        &renderer->objStorage,
+        device->logical,
+        device->physical);
     renderer->presentExtent = presentExtent;
 
     /* GBUFFER */
@@ -645,7 +659,9 @@ void Renderer_init(
         uboBinding.binding = 0;
         uboBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         uboBinding.descriptorCount = 1;
-        uboBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        uboBinding.stageFlags
+            = VK_SHADER_STAGE_VERTEX_BIT
+            | VK_SHADER_STAGE_FRAGMENT_BIT;
         uboBinding.pImmutableSamplers = NULL;
 
         VkDescriptorSetLayoutCreateInfo layoutCreateInfo;
@@ -716,7 +732,8 @@ void Renderer_init(
     /* PIPELINE LAYOUT */
     {
         VkDescriptorSetLayout pipelineDescriptorSetLayouts[] = {
-            renderer->renderDescriptorSetLayout
+            renderer->renderDescriptorSetLayout,
+            renderer->objStorage.descriptorSetLayout,
         };
 
         VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo;
@@ -781,18 +798,33 @@ void Renderer_init(
         renderer->depthImageView,
         renderer->framebuffers);
 
-    /* COMMAND BUFFERS */
+    /* ALLOCATE COMMAND BUFFERS */
     renderer->commandBuffers
         = (VkCommandBuffer*)malloc(renderer->swapLen * sizeof(VkCommandBuffer));
-    createRenderCommandBuffers(
+    {
+        VkCommandBufferAllocateInfo allocInfo;
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.pNext = NULL;
+        allocInfo.commandPool = device->commandPool;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandBufferCount = renderer->swapLen;
+
+        handleVkResult(
+            vkAllocateCommandBuffers(
+                device->logical,
+                &allocInfo,
+                renderer->commandBuffers),
+            "allocating render command buffers");
+    }
+
+    recordRenderCommandBuffers(
         device->logical,
         renderer->objRenderPass,
         renderer->presentExtent,
         renderer->pipeline,
         renderer->pipelineLayout,
         renderer->renderDescriptorSets,
-        objStorage,
-        device->commandPool,
+        &renderer->objStorage,
         renderer->swapLen,
         renderer->framebuffers,
         renderer->commandBuffers);
@@ -839,6 +871,24 @@ void Renderer_init(
     memset(renderer->swapchainImageFences, 0, renderer->swapLen * sizeof(VkFence*));
 
     renderer->currentFrame = 0;
+}
+
+void Renderer_recreateCommandBuffers(
+    Renderer* renderer,
+    VkDevice logicalDevice)
+{
+    vkDeviceWaitIdle(logicalDevice);
+    recordRenderCommandBuffers(
+        logicalDevice,
+        renderer->objRenderPass,
+        renderer->presentExtent,
+        renderer->pipeline,
+        renderer->pipelineLayout,
+        renderer->renderDescriptorSets,
+        &renderer->objStorage,
+        renderer->swapLen,
+        renderer->framebuffers,
+        renderer->commandBuffers);
 }
 
 void Renderer_drawFrame(
@@ -950,6 +1000,9 @@ void Renderer_destroy(
     Renderer* renderer,
     VkDevice logicalDevice)
 {
+    /* SCENE DATA */
+    ObjectStorage_destroy(&renderer->objStorage, logicalDevice);
+
     /* IMAGES AND FRAMEBUFFERS */
     for (uint32_t i = 0; i < renderer->swapLen; i++) {
         vkDestroyImageView(logicalDevice, renderer->swapImageViews[i], NULL);

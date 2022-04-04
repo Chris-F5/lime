@@ -15,9 +15,11 @@ typedef struct {
 } RenderDescriptorData;
 
 typedef struct {
-    VkExtent2D presentExtent;
+    /* SCENE DATA */
+    ObjectStorage objStorage;
 
     /* GBUFFER */
+    VkExtent2D presentExtent;
     VkFormat swapImageFormat;
     uint32_t swapLen;
     VkSwapchainKHR swapchain;
@@ -62,8 +64,11 @@ typedef struct {
 void Renderer_init(
     Renderer* renderer,
     VulkanDevice* device,
-    VkExtent2D presentExtent,
-    ObjectStorage* objStorage);
+    VkExtent2D presentExtent);
+
+void Renderer_recreateCommandBuffers(
+    Renderer* renderer,
+    VkDevice logicalDevice);
 
 void Renderer_drawFrame(
     Renderer* renderer,

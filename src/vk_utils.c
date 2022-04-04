@@ -151,47 +151,15 @@ void createBuffer(
         "binding buffer meomry");
 }
 
-void createImage(
+void allocateImageMemory(
     VkDevice device,
     VkPhysicalDevice physicalDevice,
-    VkImageType imageType,
-    VkFormat format,
-    VkExtent3D extent,
-    VkImageCreateFlags flags,
-    VkImageUsageFlags usageFlags,
-    uint32_t mipLevels,
-    uint32_t arrayLayers,
-    VkSampleCountFlagBits samples,
-    VkImageTiling tiling,
-    bool preinitialized,
     VkMemoryPropertyFlags memoryPropertyFlags,
-    VkImage* image,
+    VkImage image,
     VkDeviceMemory* imageMemory)
 {
-    VkImageCreateInfo createInfo;
-    createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-    createInfo.pNext = NULL;
-    createInfo.flags = flags;
-    createInfo.imageType = imageType;
-    createInfo.format = format;
-    createInfo.extent = extent;
-    createInfo.mipLevels = mipLevels;
-    createInfo.arrayLayers = arrayLayers;
-    createInfo.samples = samples;
-    createInfo.tiling = tiling;
-    createInfo.usage = usageFlags;
-    createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-    createInfo.queueFamilyIndexCount = 0;
-    createInfo.pQueueFamilyIndices = NULL;
-    createInfo.initialLayout = preinitialized 
-        ? VK_IMAGE_LAYOUT_PREINITIALIZED : VK_IMAGE_LAYOUT_UNDEFINED;
-
-    handleVkResult(
-        vkCreateImage(device, &createInfo, NULL, image),
-        "creating image");
-
     VkMemoryRequirements memReq;
-    vkGetImageMemoryRequirements(device, *image, &memReq);
+    vkGetImageMemoryRequirements(device, image, &memReq);
 
     VkMemoryAllocateInfo allocInfo;
     allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -207,8 +175,96 @@ void createImage(
         "allocating image");
 
     handleVkResult(
-        vkBindImageMemory(device, *image, *imageMemory, 0),
+        vkBindImageMemory(device, image, *imageMemory, 0),
         "binding image memory");
+}
+
+void transitionImageLayout(
+    VkDevice device,
+    VkQueue queue,
+    VkCommandPool commandPool,
+    VkImage image,
+    VkImageSubresourceRange imageSubresourceRange,
+    VkImageLayout oldLayout,
+    VkImageLayout newLayout,
+    VkAccessFlags srcAccessMask,
+    VkPipelineStageFlags srcStageMask,
+    VkAccessFlags dstAccessMask,
+    VkPipelineStageFlags dstStageMask)
+{
+    VkCommandBuffer commandBuffer;
+
+    /* ALLOCATE AND RECORD COMMAND BUFFER */
+    {
+        VkCommandBufferAllocateInfo commandBufferAllocInfo;
+        commandBufferAllocInfo.sType
+            = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        commandBufferAllocInfo.pNext = NULL;
+        commandBufferAllocInfo.commandPool = commandPool;
+        commandBufferAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        commandBufferAllocInfo.commandBufferCount = 1;
+
+        handleVkResult(
+            vkAllocateCommandBuffers(
+                device,
+                &commandBufferAllocInfo,
+                &commandBuffer),
+            "allocating image layout transition command buffer");
+
+        VkCommandBufferBeginInfo beginInfo;
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.pNext = NULL;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        handleVkResult(
+            vkBeginCommandBuffer(
+                commandBuffer,
+                &beginInfo),
+            "begin recording image layout transition command buffer");
+
+        VkImageMemoryBarrier barrier;
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.pNext = NULL;
+        barrier.srcAccessMask = srcAccessMask;
+        barrier.dstAccessMask = dstAccessMask;
+        barrier.oldLayout = oldLayout;
+        barrier.newLayout = newLayout;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = image;
+        barrier.subresourceRange = imageSubresourceRange;
+
+        vkCmdPipelineBarrier(
+            commandBuffer,
+            srcStageMask, dstStageMask,
+            0,
+            0, NULL,
+            0, NULL,
+            1, &barrier);
+
+        vkEndCommandBuffer(commandBuffer);
+    }
+
+    /* SUBMIT COMMAND BUFFER */
+
+    VkSubmitInfo submitInfo;
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.pNext = NULL;
+    submitInfo.waitSemaphoreCount = 0;
+    submitInfo.pWaitSemaphores = NULL;
+    submitInfo.pWaitDstStageMask = NULL;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+    submitInfo.signalSemaphoreCount = 0;
+    submitInfo.pSignalSemaphores = NULL;
+    vkQueueSubmit(
+        queue,
+        1,
+        &submitInfo,
+        VK_NULL_HANDLE);
+
+    vkQueueWaitIdle(queue);
+
+    vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }
 
 void createShaderModule(
@@ -216,7 +272,7 @@ void createShaderModule(
     const char* srcFileName,
     VkShaderModule* shaderModule)
 {
-    FILE *file = fopen(srcFileName, "rb");
+    FILE* file = fopen(srcFileName, "rb");
     if (!file) {
         printf("Exiting because file '%s' could not be opened\n", srcFileName);
         exit(EXIT_FAILURE);
@@ -224,7 +280,7 @@ void createShaderModule(
     fseek(file, 0, SEEK_END);
     long spvLength = ftell(file);
     fseek(file, 0, SEEK_SET);
-    char* spv = (char *)malloc(spvLength);
+    char* spv = (char*)malloc(spvLength);
     fread(spv, 1, spvLength, file);
     fclose(file);
 
@@ -233,7 +289,7 @@ void createShaderModule(
     createInfo.pNext = NULL;
     createInfo.flags = 0;
     createInfo.codeSize = spvLength;
-    createInfo.pCode = (uint32_t *)spv;
+    createInfo.pCode = (uint32_t*)spv;
 
     handleVkResult(
         vkCreateShaderModule(device, &createInfo, NULL, shaderModule),

@@ -22,22 +22,25 @@ void createBuffer(
     VkBuffer* buffer,
     VkDeviceMemory* bufferMemory);
 
-void createImage(
+void allocateImageMemory(
     VkDevice device,
     VkPhysicalDevice physicalDevice,
-    VkImageType imageType,
-    VkFormat format,
-    VkExtent3D extent,
-    VkImageCreateFlags flags,
-    VkImageUsageFlags usageFlags,
-    uint32_t mipLevels,
-    uint32_t arrayLayers,
-    VkSampleCountFlagBits samples,
-    VkImageTiling tiling,
-    bool preinitialized,
     VkMemoryPropertyFlags memoryPropertyFlags,
-    VkImage* image,
+    VkImage image,
     VkDeviceMemory* imageMemory);
+
+void transitionImageLayout(
+    VkDevice device,
+    VkQueue queue,
+    VkCommandPool commandPool,
+    VkImage image,
+    VkImageSubresourceRange imageSubresourceRange,
+    VkImageLayout oldLayout,
+    VkImageLayout newLayout,
+    VkAccessFlags srcAccessMask,
+    VkPipelineStageFlags srcStageMask,
+    VkAccessFlags dstAccessMask,
+    VkPipelineStageFlags dstStageMask);
 
 void createShaderModule(
     VkDevice device,

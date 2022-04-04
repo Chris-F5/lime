@@ -6,29 +6,41 @@
 
 #define OBJECT_CAPACITY (50)
 
-#define MAX_OBJ_BACK_FACE_VERT_COUNT 36
+#define MAX_OBJ_VERT_COUNT 36
 
 typedef uint32_t ObjRef;
 
 typedef struct {
-    vec4 pos;
-    uint32_t obj;
-} ObjectBackFaceVertex;
+    vec3 pos;
+} ObjectVertex;
+
+typedef struct {
+    mat4 model;
+} ObjectUniformBuffer;
 
 typedef struct {
     uint32_t filled;
 
     vec3* positions;
     ivec3* sizes;
-    uint32_t* backFaceVertBufferOffsets;
-    uint32_t* backFaceVertCounts;
-    unsigned char* backFaceBits;
+    uint32_t* vertBufferOffsets;
 
-    VkBuffer backFaceVertBuffer;
-    VkDeviceMemory backFaceVertMemory;
+    VkBuffer vertBuffer;
+    VkDeviceMemory vertBufferMemory;
+
+    VkBuffer uniformBuffer;
+    VkDeviceMemory uniformBufferMemory;
+
+    VkImage* voxColorImages;
+    VkImageView* voxColorImageViews;
+    VkDeviceMemory* voxColorImagesMemory;
+
+    VkDescriptorSetLayout descriptorSetLayout;
+    VkDescriptorPool descriptorPool;
+    VkDescriptorSet* descriptorSets;
 } ObjectStorage;
 
-void getObjectBackFaceVertexInfo(
+void getObjectVertexInfo(
     uint32_t* bindingCount,
     const VkVertexInputBindingDescription** bindings,
     uint32_t* attributeCount,
@@ -42,6 +54,9 @@ void ObjectStorage_init(
 void ObjectStorage_addObjects(
     ObjectStorage* storage,
     VkDevice logicalDevice,
+    VkPhysicalDevice physicalDevice,
+    VkQueue graphicsQueue,
+    VkCommandPool transientCommandPool,
     uint32_t count,
     vec3* positions,
     ivec3* sizes,

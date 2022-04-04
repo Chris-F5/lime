@@ -558,7 +558,7 @@ void VulkanDevice_init(VulkanDevice* device, GLFWwindow* window)
         VkCommandPoolCreateInfo poolCreateInfo;
         poolCreateInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         poolCreateInfo.pNext = NULL;
-        poolCreateInfo.flags = 0;
+        poolCreateInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         poolCreateInfo.queueFamilyIndex 
             = device->physicalProperties.graphicsFamilyIndex;
 

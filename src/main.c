@@ -67,18 +67,23 @@ int main()
         window,
         vkDevice.physicalProperties.surfaceCapabilities);
 
-    ObjectStorage objStorage;
-    ObjectStorage_init(
-        &objStorage,
-        vkDevice.logical,
-        vkDevice.physical);
+
+    Renderer renderer;
+    Renderer_init(
+        &renderer,
+        &vkDevice,
+        presentExtent);
+
     {
         vec3 objPos = { 1.0f, 1.0f, 10.0f };
-        ivec3 objSize = { 5, 5, 5 };
+        ivec3 objSize = { 5, 3, 4 };
         ObjRef objRef;
         ObjectStorage_addObjects(
-            &objStorage,
+            &renderer.objStorage,
             vkDevice.logical,
+            vkDevice.physical,
+            vkDevice.graphicsQueue,
+            vkDevice.transientCommandPool,
             1,
             &objPos,
             &objSize,
@@ -89,20 +94,19 @@ int main()
         ivec3 objSize = { 3, 2, 1 };
         ObjRef objRef;
         ObjectStorage_addObjects(
-            &objStorage,
+            &renderer.objStorage,
             vkDevice.logical,
+            vkDevice.physical,
+            vkDevice.graphicsQueue,
+            vkDevice.transientCommandPool,
             1,
             &objPos,
             &objSize,
             &objRef);
     }
 
-    Renderer renderer;
-    Renderer_init(
-        &renderer,
-        &vkDevice,
-        presentExtent,
-        &objStorage);
+
+    Renderer_recreateCommandBuffers(&renderer, vkDevice.logical);
 
     float aspectRatio
         = (float)renderer.presentExtent.width
@@ -113,11 +117,6 @@ int main()
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         Camera_userInput(&camera, window);
-
-        ObjectStorage_updateCamPos(
-            &objStorage,
-            vkDevice.logical,
-            camera.pos);
 
         mat4 view, proj;
         Camera_viewMat(&camera, view);
@@ -133,7 +132,6 @@ int main()
     vkDeviceWaitIdle(vkDevice.logical);
 
     Renderer_destroy(&renderer, vkDevice.logical);
-    ObjectStorage_destroy(&objStorage, vkDevice.logical);
     VulkanDevice_destroy(&vkDevice);
 
     return 0;
