@@ -88,6 +88,19 @@ int main()
             &objPos,
             &objSize,
             &objRef);
+
+        uint8_t* voxels = malloc(5 * 3 * 4);
+        for (uint32_t i = 0; i < 5 * 3 * 4; i++) {
+            voxels[i] = i % 2;
+        }
+        ObjectStorage_updateVoxColors(
+            &renderer.objStorage,
+            vkDevice.logical,
+            vkDevice.transientCommandPool,
+            vkDevice.graphicsQueue,
+            objRef,
+            voxels);
+        free(voxels);
     }
     {
         vec3 objPos = { 4.0f, 3.0f, 8.0f };

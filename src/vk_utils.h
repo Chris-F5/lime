@@ -42,6 +42,14 @@ void transitionImageLayout(
     VkAccessFlags dstAccessMask,
     VkPipelineStageFlags dstStageMask);
 
+void copyBufferToGeneralColorImage(
+    VkDevice device,
+    VkCommandPool commandPool,
+    VkQueue queue,
+    VkBuffer buffer,
+    VkImage image,
+    VkExtent3D imageExtent);
+
 void createShaderModule(
     VkDevice device,
     const char* srcFileName,

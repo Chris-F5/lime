@@ -241,7 +241,9 @@ void transitionImageLayout(
             0, NULL,
             1, &barrier);
 
-        vkEndCommandBuffer(commandBuffer);
+        handleVkResult(
+            vkEndCommandBuffer(commandBuffer),
+            "ending layout transition command buffer");
     }
 
     /* SUBMIT COMMAND BUFFER */
@@ -262,7 +264,98 @@ void transitionImageLayout(
         &submitInfo,
         VK_NULL_HANDLE);
 
-    vkQueueWaitIdle(queue);
+    handleVkResult(
+        vkQueueWaitIdle(queue),
+        "waiting queue idle for image layout transition");
+
+    vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
+}
+
+void copyBufferToGeneralColorImage(
+    VkDevice device,
+    VkCommandPool commandPool,
+    VkQueue queue,
+    VkBuffer buffer,
+    VkImage image,
+    VkExtent3D imageExtent)
+{
+    VkCommandBuffer commandBuffer;
+
+    /* ALLOCATE AND RECORD COMMAND BUFFER */
+    {
+        VkCommandBufferAllocateInfo commandBufferAllocInfo;
+        commandBufferAllocInfo.sType
+            = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        commandBufferAllocInfo.pNext = NULL;
+        commandBufferAllocInfo.commandPool = commandPool;
+        commandBufferAllocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        commandBufferAllocInfo.commandBufferCount = 1;
+
+        handleVkResult(
+            vkAllocateCommandBuffers(
+                device,
+                &commandBufferAllocInfo,
+                &commandBuffer),
+            "allocating buffer to image copy command buffer");
+
+        VkCommandBufferBeginInfo beginInfo;
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.pNext = NULL;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+        handleVkResult(
+            vkBeginCommandBuffer(
+                commandBuffer,
+                &beginInfo),
+            "begin recording buffer to image copy command buffer");
+
+        VkImageSubresourceLayers subresource;
+        subresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        subresource.mipLevel = 0;
+        subresource.baseArrayLayer = 0;
+        subresource.layerCount = 1;
+
+        VkBufferImageCopy copy;
+        copy.bufferOffset = 0;
+        copy.bufferRowLength = 0;
+        copy.bufferImageHeight = 0;
+        copy.imageSubresource = subresource;
+        copy.imageOffset = (VkOffset3D){0, 0, 0};
+        copy.imageExtent = imageExtent;
+
+        vkCmdCopyBufferToImage(
+            commandBuffer,
+            buffer,
+            image,
+            VK_IMAGE_LAYOUT_GENERAL,
+            1,
+            &copy);
+
+        handleVkResult(
+            vkEndCommandBuffer(commandBuffer),
+            "ending buffer image copy command buffer");
+    }
+
+    /* SUBMIT COMMAND BUFFER */
+
+    VkSubmitInfo submitInfo;
+    submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    submitInfo.pNext = NULL;
+    submitInfo.waitSemaphoreCount = 0;
+    submitInfo.pWaitSemaphores = NULL;
+    submitInfo.pWaitDstStageMask = NULL;
+    submitInfo.commandBufferCount = 1;
+    submitInfo.pCommandBuffers = &commandBuffer;
+    submitInfo.signalSemaphoreCount = 0;
+    submitInfo.pSignalSemaphores = NULL;
+    vkQueueSubmit(
+        queue,
+        1,
+        &submitInfo,
+        VK_NULL_HANDLE);
+
+    handleVkResult(
+        vkQueueWaitIdle(queue),
+        "waiting queue idle for buffer image copy");
 
     vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
 }

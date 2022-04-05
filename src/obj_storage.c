@@ -1,6 +1,7 @@
 #include "./obj_storage.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 #include <cglm/cglm.h>
 
@@ -191,7 +192,8 @@ void createVoxelColorImage(
     imageCreateInfo.arrayLayers = 1;
     imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageCreateInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT;
+    imageCreateInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT 
+        | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageCreateInfo.queueFamilyIndexCount = 0;
     imageCreateInfo.pQueueFamilyIndices = NULL;
@@ -208,8 +210,7 @@ void createVoxelColorImage(
     allocateImageMemory(
         logicalDevice,
         physicalDevice,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
-            | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
         *image,
         imageMemory);
 
@@ -300,6 +301,17 @@ void ObjectStorage_init(
             | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         &storage->uniformBuffer,
         &storage->uniformBufferMemory);
+
+    createBuffer(
+        logicalDevice,
+        physicalDevice,
+        MAX_OBJ_VOX_COUNT,
+        0,
+        VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+            | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &storage->voxImageStagingBuffer,
+        &storage->voxImageStagingBufferMemory);
 
     /* DESCRIPTOR SETS */
     createObjectDescriptorSetLayout(
@@ -447,9 +459,40 @@ void ObjectStorage_addObjects(
 
 void ObjectStorage_updateVoxColors(
     ObjectStorage* storage,
+    VkDevice logicalDevice,
+    VkCommandPool transientCommandPool,
+    VkQueue graphicsQueue,
     ObjRef obj,
     uint8_t* colors)
 {
+    uint32_t memSize 
+        = storage->sizes[obj][0]
+        * storage->sizes[obj][1]
+        * storage->sizes[obj][2];
+
+    uint8_t* stagingBuffer;
+    vkMapMemory(
+        logicalDevice,
+        storage->voxImageStagingBufferMemory,
+        0,
+        memSize,
+        0,
+        (void*)&stagingBuffer);
+    
+    memcpy(stagingBuffer, colors, memSize);
+
+    vkUnmapMemory(logicalDevice, storage->voxImageStagingBufferMemory);
+
+    copyBufferToGeneralColorImage(
+        logicalDevice,
+        transientCommandPool,
+        graphicsQueue,
+        storage->voxImageStagingBuffer,
+        storage->voxColorImages[obj],
+        (VkExtent3D){
+            storage->sizes[obj][0],
+            storage->sizes[obj][1],
+            storage->sizes[obj][2]});
 }
 
 void ObjectStorage_destroy(ObjectStorage* storage, VkDevice logicalDevice)
@@ -458,6 +501,8 @@ void ObjectStorage_destroy(ObjectStorage* storage, VkDevice logicalDevice)
     vkFreeMemory(logicalDevice, storage->vertBufferMemory, NULL);
     vkDestroyBuffer(logicalDevice, storage->uniformBuffer, NULL);
     vkFreeMemory(logicalDevice, storage->uniformBufferMemory, NULL);
+    vkDestroyBuffer(logicalDevice, storage->voxImageStagingBuffer, NULL);
+    vkFreeMemory(logicalDevice, storage->voxImageStagingBufferMemory, NULL);
 
     for (int i = 0; i < storage->filled; i++) {
         vkDestroyImage(logicalDevice, storage->voxColorImages[i], NULL);
