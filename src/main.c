@@ -91,7 +91,7 @@ int main()
 
         uint8_t* voxels = malloc(5 * 3 * 4);
         for (uint32_t i = 0; i < 5 * 3 * 4; i++) {
-            voxels[i] = i % 2;
+            voxels[i] = i % 4 == 0;
         }
         ObjectStorage_updateVoxColors(
             &renderer.objStorage,

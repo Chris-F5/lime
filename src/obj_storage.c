@@ -29,14 +29,14 @@ const static VkVertexInputAttributeDescription OBJ_VERT_INPUT_ATTRIBS[] = {
 const static VkFormat VOX_COLOR_IMAGE_FORMAT = VK_FORMAT_R8_UINT;
 
 const static vec3 cubePoints[] = {
-    { 0, 0, 0 },
-    { 0, 0, 1 },
-    { 0, 1, 0 },
-    { 0, 1, 1 },
-    { 1, 0, 0 },
-    { 1, 0, 1 },
-    { 1, 1, 0 },
-    { 1, 1, 1 }
+    { -0.1, -0.1, -0.1 },
+    { -0.1, -0.1, +1.1 },
+    { -0.1, +1.1, -0.1 },
+    { -0.1, +1.1, +1.1 },
+    { +1.1, -0.1, -0.1 },
+    { +1.1, -0.1, +1.1 },
+    { +1.1, +1.1, -0.1 },
+    { +1.1, +1.1, +1.1 }
 };
 
 void getObjectVertexInfo(
