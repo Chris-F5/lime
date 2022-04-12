@@ -323,7 +323,7 @@ static void createPipeline(
     rasterizationInfo.depthClampEnable = VK_FALSE;
     rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
     rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizationInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterizationInfo.cullMode = VK_CULL_MODE_NONE;
     rasterizationInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
     rasterizationInfo.depthBiasEnable = VK_FALSE;
     rasterizationInfo.depthBiasConstantFactor = 0.0f;
@@ -895,7 +895,9 @@ void Renderer_drawFrame(
     Renderer* renderer,
     VulkanDevice* device,
     mat4 view,
-    mat4 proj)
+    mat4 proj,
+    float nearClip,
+    float farClip)
 {
     handleVkResult(
         vkWaitForFences(
@@ -951,6 +953,8 @@ void Renderer_drawFrame(
 
     glm_mat4_copy(view, renderData->view);
     glm_mat4_copy(proj, renderData->proj);
+    renderData->nearClip = nearClip;
+    renderData->farClip = farClip;
 
     vkUnmapMemory(device->logical, renderer->renderDescriptorBufferMemory);
 

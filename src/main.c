@@ -76,7 +76,7 @@ int main()
 
     {
         vec3 objPos = { 1.0f, 1.0f, 10.0f };
-        ivec3 objSize = { 5, 3, 4 };
+        ivec3 objSize = { 50, 30, 40 };
         ObjRef objRef;
         ObjectStorage_addObjects(
             &renderer.objStorage,
@@ -89,9 +89,9 @@ int main()
             &objSize,
             &objRef);
 
-        uint8_t* voxels = malloc(5 * 3 * 4);
-        for (uint32_t i = 0; i < 5 * 3 * 4; i++) {
-            voxels[i] = i % 4 == 0;
+        uint8_t* voxels = malloc(50 * 30 * 40);
+        for (uint32_t i = 0; i < 50 * 30 * 40; i++) {
+            voxels[i] = i % 7 == 0;
         }
         ObjectStorage_updateVoxColors(
             &renderer.objStorage,
@@ -139,7 +139,9 @@ int main()
             &renderer,
             &vkDevice,
             view,
-            proj);
+            proj,
+            camera.nearClip,
+            camera.farClip);
     }
 
     vkDeviceWaitIdle(vkDevice.logical);

@@ -3,6 +3,8 @@
 layout(set = 0, binding = 0) uniform GlobalUniformBuffer {
     mat4 view;
     mat4 proj;
+    float nearClip;
+    float farClip;
 };
 
 layout(set = 1, binding = 0) uniform ObjectUniformBuffer {

@@ -12,6 +12,8 @@
 typedef struct {
     mat4 view;
     mat4 proj;
+    float nearClip; // TODO : is there a way to guarantee 32 bit
+    float farClip;
 } RenderDescriptorData;
 
 typedef struct {
@@ -74,7 +76,9 @@ void Renderer_drawFrame(
     Renderer* renderer,
     VulkanDevice* device,
     mat4 view,
-    mat4 proj);
+    mat4 proj,
+    float nearClip,
+    float farClip);
 
 void Renderer_destroy(
     Renderer* renderer,
