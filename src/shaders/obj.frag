@@ -19,12 +19,12 @@ layout(location = 1) in vec3 fragPos;
 layout(location = 0) out vec4 outColor;
 
 void writeColor(vec3 color) {
-    //outColor = vec4(color, 1.0);
+    outColor = vec4(color, 1.0);
 }
 
 void writeDepth(float depth) {
     gl_FragDepth = depth;
-    outColor = vec4(depth * 40, depth * 40, depth * 40, 1.0);
+    //outColor = vec4(depth * 40, depth * 40, depth * 40, 1.0);
 }
 
 void main() {
