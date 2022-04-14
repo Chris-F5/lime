@@ -33,6 +33,11 @@ typedef struct {
     VkDeviceMemory depthImageMemory;
     VkImageView depthImageView;
 
+    VkFormat normalImageFormat;
+    VkImage normalImage;
+    VkDeviceMemory normalImageMemory;
+    VkImageView normalImageView;
+
     /* DESCRIPTOR SETS */
     VkDescriptorPool descriptorPool;
 

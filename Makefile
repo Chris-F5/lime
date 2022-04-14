@@ -9,7 +9,11 @@ DEPENDS = $(patsubst ./src/%.c, obj/%.d,$(SRCS))
 
 .PHONY: all run clean debug valgrind
 
-REQUIREDSHADERS = target/obj.vert.spv target/obj.frag.spv
+REQUIREDSHADERS = target/obj.vert.spv \
+				  target/obj.frag.spv
+
+OBJFRAGDEFINES = -DNORMALS_TO_SWAPCHAIN=1 \
+				 -DDEPTH_TO_SWAPCHAIN=0
 
 all: target/$(OUTPUTNAME) $(REQUIREDSHADERS)
 
@@ -23,9 +27,12 @@ obj/%.o: src/%.c
 	mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@ $(LDFLAGS)
 
-target/%.spv: src/shaders/% $(SHADERLIBS)
+target/obj.vert.spv: src/shaders/obj.vert
 	mkdir -p $(dir $@)
-	glslc $< -o $@
+	glslc $< -o $@ -Isrc/shaders
+target/obj.frag.spv: src/shaders/obj.frag
+	mkdir -p $(dir $@)
+	glslc $< -o $@ -Isrc/shaders $(OBJFRAGDEFINES)
 
 run: all
 	cd target; ./$(OUTPUTNAME)

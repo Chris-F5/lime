@@ -17,14 +17,26 @@ layout(location = 0) in vec3 fragColor;
 layout(location = 1) in vec3 fragPos;
 
 layout(location = 0) out vec4 outColor;
+layout(location = 1) out vec4 outNormal;
 
 void writeColor(vec3 color) {
+#if NORMALS_TO_SWAPCHAIN == 0 && DEPTH_TO_SWAPCHAIN == 0
     outColor = vec4(color, 1.0);
+#endif
+}
+
+void writeNormal(vec3 normal) {
+    outNormal = vec4(normal, 1.0);
+#if NORMALS_TO_SWAPCHAIN
+    outColor = vec4(normal, 1.0);
+#endif
 }
 
 void writeDepth(float depth) {
     gl_FragDepth = depth;
-    //outColor = vec4(depth * 40, depth * 40, depth * 40, 1.0);
+#if DEPTH_TO_SWAPCHAIN
+    outColor = vec4(depth * 40, depth * 40, depth * 40, 1.0);
+#endif
 }
 
 void main() {
@@ -62,6 +74,7 @@ void main() {
     if (imgDat.x != 0) {
         writeColor(vec3(1.0, 0.0, 1.0));
         writeDepth(0.0);
+        writeNormal(-dir);
         return;
     }
 
@@ -177,9 +190,8 @@ void main() {
         writeColor(vec3(0.0, 0.0, 1.0));
         writeDepth(1);
     } else {
-        vec3 lightDir = vec3(0.2, 0.7, 0.1);
-        float normalLight = dot(lightDir, hitNormal);
-        writeColor(vec3(0.8 * normalLight + 0.2, 0.0, 0.0));
+        writeColor(vec3(1.0, 0.0, 0.0));
+        writeNormal(hitNormal);
 
         if (baseDistance == 0) {
             writeDepth(

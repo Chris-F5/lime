@@ -139,9 +139,84 @@ static void createDepthImage(
         "creating depth image view");
 }
 
+static void createNormalImage(
+    VkDevice logicalDevice,
+    VkPhysicalDevice physicalDevice,
+    VkFormat normalImageFormat,
+    VkExtent2D extent,
+    VkImage* normalImage,
+    VkDeviceMemory* normalImageMemory,
+    VkImageView* normalImageView)
+{
+    VkExtent3D extent3D;
+    extent3D.width = extent.width;
+    extent3D.height = extent.height;
+    extent3D.depth = 1;
+
+    VkImageCreateInfo imageCreateInfo;
+    imageCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    imageCreateInfo.pNext = NULL;
+    imageCreateInfo.flags = 0;
+    imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
+    imageCreateInfo.format = normalImageFormat;
+    imageCreateInfo.extent = extent3D;
+    imageCreateInfo.mipLevels = 1;
+    imageCreateInfo.arrayLayers = 1;
+    imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    imageCreateInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    imageCreateInfo.queueFamilyIndexCount = 0;
+    imageCreateInfo.pQueueFamilyIndices = NULL;
+    imageCreateInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    handleVkResult(
+        vkCreateImage(
+            logicalDevice,
+            &imageCreateInfo,
+            NULL,
+            normalImage),
+        "creating normal image");
+
+    allocateImageMemory(
+        logicalDevice,
+        physicalDevice,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        *normalImage,
+        normalImageMemory);
+
+    VkImageSubresourceRange subresourceRange;
+    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    subresourceRange.baseMipLevel = 0;
+    subresourceRange.levelCount = 1;
+    subresourceRange.baseArrayLayer = 0;
+    subresourceRange.layerCount = 1;
+
+    VkImageViewCreateInfo viewCreateInfo;
+    viewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewCreateInfo.pNext = NULL;
+    viewCreateInfo.flags = 0;
+    viewCreateInfo.image = *normalImage;
+    viewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewCreateInfo.format = normalImageFormat;
+    viewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewCreateInfo.subresourceRange = subresourceRange;
+    handleVkResult(
+        vkCreateImageView(
+            logicalDevice,
+            &viewCreateInfo,
+            NULL,
+            normalImageView),
+        "creating normal image view");
+}
+
 static void createObjRenderPass(
     VkDevice logicalDevice,
     VkFormat swapImageFormat,
+    VkFormat normalImageFormat,
     VkFormat depthImageFormat,
     VkRenderPass* renderPass)
 {
@@ -157,9 +232,16 @@ static void createObjRenderPass(
     colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
-    VkAttachmentReference colorAttachmentRef;
-    colorAttachmentRef.attachment = 0;
-    colorAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    VkAttachmentDescription normalAttachment;
+    normalAttachment.flags = 0;
+    normalAttachment.format = normalImageFormat;
+    normalAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    normalAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    normalAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    normalAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    normalAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    normalAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    normalAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     VkAttachmentDescription depthAttachment;
     depthAttachment.flags = 0;
@@ -173,10 +255,23 @@ static void createObjRenderPass(
     depthAttachment.finalLayout
         = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
+    VkAttachmentReference swapImageAttachmentRef;
+    swapImageAttachmentRef.attachment = 0;
+    swapImageAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference normalAttachmentRef;
+    normalAttachmentRef.attachment = 1;
+    normalAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
     VkAttachmentReference depthAtttachmentRef;
-    depthAtttachmentRef.attachment = 1;
+    depthAtttachmentRef.attachment = 2;
     depthAtttachmentRef.layout
         = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference colorAttachments[] = {
+        swapImageAttachmentRef,
+        normalAttachmentRef
+    };
 
     /* OBJ SUBPASS */
     VkSubpassDescription objSubpass;
@@ -184,8 +279,9 @@ static void createObjRenderPass(
     objSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     objSubpass.inputAttachmentCount = 0;
     objSubpass.pInputAttachments = NULL;
-    objSubpass.colorAttachmentCount = 1;
-    objSubpass.pColorAttachments = &colorAttachmentRef;
+    objSubpass.colorAttachmentCount 
+        = sizeof(colorAttachments) / sizeof(colorAttachments[0]);
+    objSubpass.pColorAttachments = colorAttachments;
     objSubpass.pResolveAttachments = NULL;
     objSubpass.pDepthStencilAttachment = &depthAtttachmentRef;
     objSubpass.preserveAttachmentCount = 0;
@@ -211,6 +307,7 @@ static void createObjRenderPass(
     /* RENDER PASS */
     VkAttachmentDescription attachments[] = {
         colorAttachment,
+        normalAttachment,
         depthAttachment
     };
     VkSubpassDescription subpasses[] = {
@@ -359,15 +456,38 @@ static void createPipeline(
     depthStencil.maxDepthBounds = 1.0f;
 
     /* COLOR BLENDING */
-    VkPipelineColorBlendAttachmentState colorBlendAttachment;
-    colorBlendAttachment.blendEnable = VK_FALSE;
-    colorBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-    colorBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-    colorBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-    colorBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-    colorBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-    colorBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-    colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+    VkPipelineColorBlendAttachmentState swapBlendAttachment;
+    swapBlendAttachment.blendEnable = VK_FALSE;
+    swapBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    swapBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    swapBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+    swapBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    swapBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    swapBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+    swapBlendAttachment.colorWriteMask 
+        = VK_COLOR_COMPONENT_R_BIT 
+        | VK_COLOR_COMPONENT_G_BIT 
+        | VK_COLOR_COMPONENT_B_BIT 
+        | VK_COLOR_COMPONENT_A_BIT;
+
+    VkPipelineColorBlendAttachmentState normalBlendAttachment;
+    normalBlendAttachment.blendEnable = VK_FALSE;
+    normalBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    normalBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    normalBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+    normalBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    normalBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    normalBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+    normalBlendAttachment.colorWriteMask 
+        = VK_COLOR_COMPONENT_R_BIT 
+        | VK_COLOR_COMPONENT_G_BIT 
+        | VK_COLOR_COMPONENT_B_BIT 
+        | VK_COLOR_COMPONENT_A_BIT;
+
+    VkPipelineColorBlendAttachmentState blendAttachments[] = {
+        swapBlendAttachment,
+        normalBlendAttachment
+    };
 
     VkPipelineColorBlendStateCreateInfo colorBlendInfo;
     colorBlendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
@@ -375,8 +495,9 @@ static void createPipeline(
     colorBlendInfo.flags = 0;
     colorBlendInfo.logicOpEnable = VK_FALSE;
     colorBlendInfo.logicOp = VK_LOGIC_OP_COPY;
-    colorBlendInfo.attachmentCount = 1;
-    colorBlendInfo.pAttachments = &colorBlendAttachment;
+    colorBlendInfo.attachmentCount 
+        = sizeof(blendAttachments) / sizeof(blendAttachments[0]);
+    colorBlendInfo.pAttachments = blendAttachments;
     colorBlendInfo.blendConstants[0] = 0.0f;
     colorBlendInfo.blendConstants[1] = 0.0f;
     colorBlendInfo.blendConstants[2] = 0.0f;
@@ -422,11 +543,16 @@ static void createFramebuffers(
     VkExtent2D extent,
     uint32_t count,
     VkImageView* swapImageViews,
+    VkImageView normalImageView,
     VkImageView depthImageView,
     VkFramebuffer* framebuffers)
 {
     for (uint32_t i = 0; i < count; i++) {
-        VkImageView attachments[] = { swapImageViews[i], depthImageView };
+        VkImageView attachments[] = {
+            swapImageViews[i],
+            normalImageView,
+            depthImageView
+        };
 
         VkFramebufferCreateInfo framebufferCreateInfo;
         framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -475,14 +601,14 @@ static void recordRenderCommandBuffers(
             vkBeginCommandBuffer(commandBuffers[s], &beginInfo),
             "begin recording render command buffers");
 
-        VkClearValue clearValues[2];
+        VkClearValue clearValues[3];
         memset(clearValues, 0, sizeof(clearValues));
         clearValues[0].color.float32[0] = 128.0f / 255.0;
         clearValues[0].color.float32[1] = 218.0f / 255.0;
         clearValues[0].color.float32[2] = 251.0f / 255.0;
         clearValues[0].color.float32[3] = 1.0f;
 
-        clearValues[1].depthStencil.depth = 1.0f;
+        clearValues[2].depthStencil.depth = 1.0f;
 
         VkRenderPassBeginInfo renderPassInfo;
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -630,6 +756,16 @@ void Renderer_init(
         &renderer->depthImageMemory,
         &renderer->depthImageView);
 
+    renderer->normalImageFormat = VK_FORMAT_B8G8R8A8_UNORM;
+    createNormalImage(
+        device->logical,
+        device->physical,
+        renderer->normalImageFormat,
+        renderer->presentExtent,
+        &renderer->normalImage,
+        &renderer->normalImageMemory,
+        &renderer->normalImageView);
+
     /* DESCRIPTOR POOL */
     {
         VkDescriptorPoolSize poolSize;
@@ -726,6 +862,7 @@ void Renderer_init(
     createObjRenderPass(
         device->logical,
         renderer->swapImageFormat,
+        renderer->normalImageFormat,
         renderer->depthImageFormat,
         &renderer->objRenderPass);
 
@@ -795,6 +932,7 @@ void Renderer_init(
         renderer->presentExtent,
         renderer->swapLen,
         renderer->swapImageViews,
+        renderer->normalImageView,
         renderer->depthImageView,
         renderer->framebuffers);
 
@@ -868,7 +1006,10 @@ void Renderer_init(
 
     renderer->swapchainImageFences
         = (VkFence**)malloc(renderer->swapLen * sizeof(VkFence*));
-    memset(renderer->swapchainImageFences, 0, renderer->swapLen * sizeof(VkFence*));
+    memset(
+        renderer->swapchainImageFences,
+        0,
+        renderer->swapLen * sizeof(VkFence*));
 
     renderer->currentFrame = 0;
 }
@@ -1013,9 +1154,15 @@ void Renderer_destroy(
         vkDestroyFramebuffer(logicalDevice, renderer->framebuffers[i], NULL);
     }
     vkDestroySwapchainKHR(logicalDevice, renderer->swapchain, NULL);
+
     vkDestroyImage(logicalDevice, renderer->depthImage, NULL);
     vkFreeMemory(logicalDevice, renderer->depthImageMemory, NULL);
     vkDestroyImageView(logicalDevice, renderer->depthImageView, NULL);
+
+    vkDestroyImage(logicalDevice, renderer->normalImage, NULL);
+    vkFreeMemory(logicalDevice, renderer->normalImageMemory, NULL);
+    vkDestroyImageView(logicalDevice, renderer->normalImageView, NULL);
+
     free(renderer->swapImages);
     free(renderer->swapImageViews);
     free(renderer->framebuffers);

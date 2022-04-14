@@ -383,7 +383,7 @@ static bool checkPhysicalDeviceProperties(
             &physicalDeviceProperties->presentMode))
         return false;
 
-    /* DPETH BUFFER FORMAT */
+    /* DEPTH IMAGE FORMATS */
     physicalDeviceProperties->depthImageFormat = VK_FORMAT_D32_SFLOAT;
     VkFormatProperties depthImageFormatProperties;
     vkGetPhysicalDeviceFormatProperties(
