@@ -16,72 +16,69 @@ layout(set = 1, binding = 1, r8ui) uniform uimage3D voxColors;
 layout(location = 0) in vec3 fragColor;
 layout(location = 1) in vec3 fragPos;
 
-layout(location = 0) out vec4 outColor;
+layout(location = 0) out vec4 outAlbedo;
 layout(location = 1) out vec4 outNormal;
 
-void writeColor(vec3 color) {
-#if NORMALS_TO_SWAPCHAIN == 0 && DEPTH_TO_SWAPCHAIN == 0
-    outColor = vec4(color, 1.0);
-#endif
-}
-
-void writeNormal(vec3 normal) {
-    outNormal = vec4(normal, 1.0);
-#if NORMALS_TO_SWAPCHAIN
-    outColor = vec4(normal, 1.0);
-#endif
-}
-
-void writeDepth(float depth) {
+void writeDepth(float depth)
+{
     gl_FragDepth = depth;
-#if DEPTH_TO_SWAPCHAIN
-    outColor = vec4(depth * 40, depth * 40, depth * 40, 1.0);
-#endif
 }
 
-void main() {
+void writeAlbedo(vec3 color)
+{
+    outAlbedo = vec4(color, 1.0);
+}
+
+void writeNormal(vec3 normal)
+{
+    outNormal = vec4(normal, 1.0);
+}
+
+float camDistanceToDepth(float distanceFromCameraPlane)
+{
+    float depth
+        = ((farClip + nearClip) - 2.0 * nearClip * farClip / distanceFromCameraPlane)
+        / (farClip - nearClip);
+    depth = (depth + 1.0) / 2.0;
+    return depth;
+}
+
+void main()
+{
     vec3 scale = vec3(model[0][0], model[1][1], model[2][2]);
     mat4 inverseView = inverse(view);
     vec3 camPos = vec3(inverseView[3][0], inverseView[3][1], inverseView[3][2]);
+    vec3 camDir = -normalize(vec3(inverseView[2][0], inverseView[2][1], inverseView[2][2]));
 
     vec3 modelTranslation = vec3(model[3][0], model[3][1], model[3][2]);
 
-    float baseDistance;
-    vec3 objPos;
-    ivec3 objPosInt;
-    if (gl_FrontFacing) {
-        objPos = fragPos * scale;
-        baseDistance = gl_FragCoord.z;
-    } else {
-        // todo: check if camera in object
-        objPos = camPos - modelTranslation;
-        baseDistance = 0;
-    }
-    objPosInt = ivec3(
+    // TODO: find point this ray enters object and start traversing from there
+    vec3 objPos = camPos - modelTranslation;
+    ivec3 objPosInt = ivec3(
         floor(objPos.x),
         floor(objPos.y),
         floor(objPos.z));
 
-    // todo: find dir faster
+    // TODO: find dir faster
     vec3 fragWorldPos = vec3(model * vec4(fragPos, 1));
     vec3 dir = fragWorldPos - camPos;
     dir = normalize(dir);
 
-    uint hit = 1;
-    vec3 hitNormal;
 
     uvec4 imgDat = imageLoad(voxColors, objPosInt);
     if (imgDat.x != 0) {
-        writeColor(vec3(1.0, 0.0, 1.0));
         writeDepth(0.0);
+        writeAlbedo(vec3(1.0, 0.0, 1.0));
         writeNormal(-dir);
         return;
     }
 
+    uint hit = 1;
     ivec3 step;
     ivec3 outOfBounds;
     vec3 tDelta;
     vec3 tMax;
+
     if (dir.x >= 0) {
         step.x = 1;
         outOfBounds.x = int(scale.x);
@@ -137,42 +134,43 @@ void main() {
     }
 
     float t = 0;
+    vec3 hitNormal;
     if (hit == 1) {
         hit = 0;
         while(true) {
             if(tMax.x < tMax.y) {
                 if (tMax.x < tMax.z) {
                     objPosInt.x += step.x;
+                    t = tMax.x;
                     if (objPosInt.x == outOfBounds.x) {
                         break;
                     }
-                    t = tMax.x;
                     tMax.x += tDelta.x;
                     hitNormal = vec3(-step.x, 0.0, 0.0);
                 } else {
                     objPosInt.z += step.z;
+                    t = tMax.z;
                     if (objPosInt.z == outOfBounds.z) {
                         break;
                     }
-                    t = tMax.z;
                     tMax.z += tDelta.z;
                     hitNormal = vec3(0.0, 0.0, -step.z);
                 }
             } else {
                 if (tMax.y < tMax.z) {
                     objPosInt.y += step.y;
+                    t = tMax.y;
                     if (objPosInt.y == outOfBounds.y) {
                         break;
                     }
-                    t = tMax.y;
                     tMax.y += tDelta.y;
                     hitNormal = vec3(0.0, -step.y, 0);
                 } else {
                     objPosInt.z += step.z;
+                    t = tMax.z;
                     if (objPosInt.z == outOfBounds.z) {
                         break;
                     }
-                    t = tMax.z;
                     tMax.z += tDelta.z;
                     hitNormal = vec3(0.0, 0.0, -step.z);
                 }
@@ -186,21 +184,13 @@ void main() {
         }
     }
 
-    if (hit == 0) {
-        writeColor(vec3(0.0, 0.0, 1.0));
+    if(hit == 0) {
         writeDepth(1);
     } else {
-        writeColor(vec3(1.0, 0.0, 0.0));
+        float distanceFromCameraPlane = t * dot(camDir, dir);
+        writeDepth(camDistanceToDepth(distanceFromCameraPlane));
+        writeAlbedo(vec3(1.0, 0.0, 0.0));
         writeNormal(hitNormal);
-
-        if (baseDistance == 0) {
-            writeDepth(
-                (t - nearClip)
-                / (farClip - nearClip));
-        } else {
-            writeDepth(
-                baseDistance
-                + t / (farClip - nearClip));
-        }
     }
 }
+

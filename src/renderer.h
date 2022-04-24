@@ -14,13 +14,13 @@ typedef struct {
     mat4 proj;
     float nearClip; // TODO : is there a way to guarantee 32 bit
     float farClip;
-} RenderDescriptorData;
+} CameraUniformData;
 
 typedef struct {
     /* SCENE DATA */
     ObjectStorage objStorage;
 
-    /* GBUFFER */
+    /* SWAPCHAIN */
     VkExtent2D presentExtent;
     VkFormat swapImageFormat;
     uint32_t swapLen;
@@ -28,33 +28,52 @@ typedef struct {
     VkImage* swapImages;
     VkImageView* swapImageViews;
 
+    /* GBUFFER */
     VkFormat depthImageFormat;
     VkImage depthImage;
     VkDeviceMemory depthImageMemory;
     VkImageView depthImageView;
+
+    VkFormat albedoImageFormat;
+    VkImage albedoImage;
+    VkDeviceMemory albedoImageMemory;
+    VkImageView albedoImageView;
 
     VkFormat normalImageFormat;
     VkImage normalImage;
     VkDeviceMemory normalImageMemory;
     VkImageView normalImageView;
 
+    /* SAMPLERS */
+    VkSampler gbufferSampler;
+
+    /* UNIFORM BUFFERS */
+    VkBuffer cameraUniformBuffer;
+    VkDeviceMemory cameraUniformBufferMemory;
+
     /* DESCRIPTOR SETS */
     VkDescriptorPool descriptorPool;
 
-    VkDescriptorSetLayout renderDescriptorSetLayout;
-    VkDescriptorSet* renderDescriptorSets;
+    VkDescriptorSetLayout cameraDescriptorSetLayout;
+    VkDescriptorSet* cameraDescriptorSets;
 
-    VkBuffer renderDescriptorBuffer;
-    VkDeviceMemory renderDescriptorBufferMemory;
+    VkDescriptorSetLayout lightingPassDescriptorSetLayout;
+    VkDescriptorSet lightingPassDescriptorSet;
 
     /* PIPELINES */
-    VkRenderPass objRenderPass;
+    VkPipelineLayout objGeometryPipelineLayout;
+    VkPipeline objGeometryPipeline;
 
-    VkPipelineLayout pipelineLayout;
-    VkPipeline pipeline;
+    VkPipelineLayout lightingPipelineLayout;
+    VkPipeline lightingPipeline;
+
+    /* RENDER PASSES */
+    VkRenderPass geometryRenderPass;
+    VkRenderPass lightingRenderPass;
 
     /* FRAMEBUFFERS */
-    VkFramebuffer* framebuffers;
+    VkFramebuffer geometryFramebuffer;
+    VkFramebuffer* swapImageFramebuffers;
 
     /* COMMAND BUFFERS */
     VkCommandBuffer* commandBuffers;

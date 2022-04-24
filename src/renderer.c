@@ -90,7 +90,9 @@ static void createDepthImage(
     imageCreateInfo.arrayLayers = 1;
     imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageCreateInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+    imageCreateInfo.usage
+        = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT
+        | VK_IMAGE_USAGE_SAMPLED_BIT;
     imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageCreateInfo.queueFamilyIndexCount = 0;
     imageCreateInfo.pQueueFamilyIndices = NULL;
@@ -139,14 +141,14 @@ static void createDepthImage(
         "creating depth image view");
 }
 
-static void createNormalImage(
+static void createColorAttachmentImage(
     VkDevice logicalDevice,
     VkPhysicalDevice physicalDevice,
-    VkFormat normalImageFormat,
+    VkFormat imageFormat,
     VkExtent2D extent,
-    VkImage* normalImage,
-    VkDeviceMemory* normalImageMemory,
-    VkImageView* normalImageView)
+    VkImage* image,
+    VkDeviceMemory* imageMemory,
+    VkImageView* imageView)
 {
     VkExtent3D extent3D;
     extent3D.width = extent.width;
@@ -158,13 +160,15 @@ static void createNormalImage(
     imageCreateInfo.pNext = NULL;
     imageCreateInfo.flags = 0;
     imageCreateInfo.imageType = VK_IMAGE_TYPE_2D;
-    imageCreateInfo.format = normalImageFormat;
+    imageCreateInfo.format = imageFormat;
     imageCreateInfo.extent = extent3D;
     imageCreateInfo.mipLevels = 1;
     imageCreateInfo.arrayLayers = 1;
     imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageCreateInfo.usage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    imageCreateInfo.usage
+        = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT
+        | VK_IMAGE_USAGE_SAMPLED_BIT;
     imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageCreateInfo.queueFamilyIndexCount = 0;
     imageCreateInfo.pQueueFamilyIndices = NULL;
@@ -175,15 +179,15 @@ static void createNormalImage(
             logicalDevice,
             &imageCreateInfo,
             NULL,
-            normalImage),
-        "creating normal image");
+            image),
+        "creating color attachment image");
 
     allocateImageMemory(
         logicalDevice,
         physicalDevice,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        *normalImage,
-        normalImageMemory);
+        *image,
+        imageMemory);
 
     VkImageSubresourceRange subresourceRange;
     subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
@@ -196,9 +200,9 @@ static void createNormalImage(
     viewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
     viewCreateInfo.pNext = NULL;
     viewCreateInfo.flags = 0;
-    viewCreateInfo.image = *normalImage;
+    viewCreateInfo.image = *image;
     viewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-    viewCreateInfo.format = normalImageFormat;
+    viewCreateInfo.format = imageFormat;
     viewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
     viewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
     viewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -209,28 +213,172 @@ static void createNormalImage(
             logicalDevice,
             &viewCreateInfo,
             NULL,
-            normalImageView),
-        "creating normal image view");
+            imageView),
+        "creating color attachment image view");
 }
 
-static void createObjRenderPass(
+static void createGeometryFramebuffer(
     VkDevice logicalDevice,
-    VkFormat swapImageFormat,
-    VkFormat normalImageFormat,
+    VkRenderPass renderPass,
+    VkExtent2D extent,
+    VkImageView depthImageView,
+    VkImageView albedoImageView,
+    VkImageView normalImageView,
+    VkFramebuffer* framebuffer)
+{
+    VkImageView attachments[] = {
+        depthImageView,
+        albedoImageView,
+        normalImageView,
+    };
+
+    VkFramebufferCreateInfo framebufferCreateInfo;
+    framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+    framebufferCreateInfo.pNext = NULL;
+    framebufferCreateInfo.flags = 0;
+    framebufferCreateInfo.renderPass = renderPass;
+    framebufferCreateInfo.attachmentCount
+        = sizeof(attachments) / sizeof(attachments[0]);
+    framebufferCreateInfo.pAttachments = attachments;
+    framebufferCreateInfo.width = extent.width;
+    framebufferCreateInfo.height = extent.height;
+    framebufferCreateInfo.layers = 1;
+
+    handleVkResult(
+        vkCreateFramebuffer(
+            logicalDevice,
+            &framebufferCreateInfo,
+            NULL,
+            framebuffer),
+        "creating graphics framebuffer");
+}
+
+static void createSwapImageFramebuffers(
+    VkDevice logicalDevice,
+    VkRenderPass renderPass,
+    VkExtent2D extent,
+    uint32_t count,
+    VkImageView* swapImageViews,
+    VkFramebuffer* framebuffers)
+{
+    for (uint32_t i = 0; i < count; i++) {
+        VkImageView attachments[] = {
+            swapImageViews[i],
+        };
+
+        VkFramebufferCreateInfo framebufferCreateInfo;
+        framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+        framebufferCreateInfo.pNext = NULL;
+        framebufferCreateInfo.flags = 0;
+        framebufferCreateInfo.renderPass = renderPass;
+        framebufferCreateInfo.attachmentCount
+            = sizeof(attachments) / sizeof(attachments[0]);
+        framebufferCreateInfo.pAttachments = attachments;
+        framebufferCreateInfo.width = extent.width;
+        framebufferCreateInfo.height = extent.height;
+        framebufferCreateInfo.layers = 1;
+
+        handleVkResult(
+            vkCreateFramebuffer(
+                logicalDevice,
+                &framebufferCreateInfo,
+                NULL,
+                &framebuffers[i]),
+            "creating swap image framebuffer");
+    }
+}
+
+void createLightingPassDescriptorSetLayout(
+    VkDevice logicalDevice,
+    uint32_t gbufferImagesCount,
+    VkDescriptorSetLayout* descriptorSetLayout)
+{
+    VkDescriptorSetLayoutBinding* bindings = (VkDescriptorSetLayoutBinding*)
+        malloc(gbufferImagesCount * sizeof(VkDescriptorSetLayoutBinding));
+    for (uint32_t i = 0; i < gbufferImagesCount; i++) {
+        bindings[i].binding = i;
+        bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        bindings[i].descriptorCount = 1;
+        bindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        bindings[i].pImmutableSamplers = NULL;
+    }
+
+    VkDescriptorSetLayoutCreateInfo layoutCreateInfo;
+    layoutCreateInfo.sType
+        = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    layoutCreateInfo.pNext = NULL;
+    layoutCreateInfo.flags = 0;
+    layoutCreateInfo.bindingCount = gbufferImagesCount;
+    layoutCreateInfo.pBindings = bindings;
+
+    handleVkResult(
+        vkCreateDescriptorSetLayout(
+            logicalDevice,
+            &layoutCreateInfo,
+            NULL,
+            descriptorSetLayout),
+        "creating lighting pass descriptor set layout");
+    free(bindings);
+}
+
+void updateLightingPassDescriptorSetBindings(
+    VkDevice logicalDevice,
+    VkSampler sampler,
+    uint32_t gbufferImagesCount,
+    VkImageView* imageViews,
+    VkDescriptorSet dstSet)
+{
+    VkDescriptorImageInfo* imageInfos = (VkDescriptorImageInfo*)malloc(
+        gbufferImagesCount * sizeof(VkDescriptorImageInfo));
+    for (uint32_t i = 0; i < gbufferImagesCount; i++) {
+        imageInfos[i].sampler = sampler;
+        imageInfos[i].imageView = imageViews[i];
+        imageInfos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    }
+
+    VkWriteDescriptorSet write;
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.pNext = NULL;
+    write.dstSet = dstSet;
+    write.dstBinding = 0;
+    write.dstArrayElement = 0;
+    write.descriptorCount = gbufferImagesCount;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    write.pImageInfo = imageInfos;
+    write.pBufferInfo = NULL;
+    write.pTexelBufferView = NULL;
+    vkUpdateDescriptorSets(logicalDevice, 1, &write, 0, NULL);
+}
+
+static void createGeometryRenderPass(
+    VkDevice logicalDevice,
     VkFormat depthImageFormat,
+    VkFormat albedoImageFormat,
+    VkFormat normalImageFormat,
     VkRenderPass* renderPass)
 {
-    /* RENDER PASS ATTACHMENTS */
-    VkAttachmentDescription colorAttachment;
-    colorAttachment.flags = 0;
-    colorAttachment.format = swapImageFormat;
-    colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    /* ATTACHMENTS */
+    VkAttachmentDescription depthAttachment;
+    depthAttachment.flags = 0;
+    depthAttachment.format = depthImageFormat;
+    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    depthAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkAttachmentDescription albedoAttachment;
+    albedoAttachment.flags = 0;
+    albedoAttachment.format = albedoImageFormat;
+    albedoAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    albedoAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    albedoAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    albedoAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    albedoAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    albedoAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    albedoAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     VkAttachmentDescription normalAttachment;
     normalAttachment.flags = 0;
@@ -241,80 +389,68 @@ static void createObjRenderPass(
     normalAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     normalAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
     normalAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    normalAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    normalAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-    VkAttachmentDescription depthAttachment;
-    depthAttachment.flags = 0;
-    depthAttachment.format = depthImageFormat;
-    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    depthAttachment.finalLayout
-        = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference swapImageAttachmentRef;
-    swapImageAttachmentRef.attachment = 0;
-    swapImageAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference normalAttachmentRef;
-    normalAttachmentRef.attachment = 1;
-    normalAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
+    /* SUBPASS */
     VkAttachmentReference depthAtttachmentRef;
-    depthAtttachmentRef.attachment = 2;
+    depthAtttachmentRef.attachment = 0;
     depthAtttachmentRef.layout
         = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
+    VkAttachmentReference albedoAttachmentRef;
+    albedoAttachmentRef.attachment = 1;
+    albedoAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference normalAttachmentRef;
+    normalAttachmentRef.attachment = 2;
+    normalAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
     VkAttachmentReference colorAttachments[] = {
-        swapImageAttachmentRef,
-        normalAttachmentRef
+        albedoAttachmentRef,
+        normalAttachmentRef,
     };
 
-    /* OBJ SUBPASS */
-    VkSubpassDescription objSubpass;
-    objSubpass.flags = 0;
-    objSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    objSubpass.inputAttachmentCount = 0;
-    objSubpass.pInputAttachments = NULL;
-    objSubpass.colorAttachmentCount 
+    VkSubpassDescription geometrySubpass;
+    geometrySubpass.flags = 0;
+    geometrySubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    geometrySubpass.inputAttachmentCount = 0;
+    geometrySubpass.pInputAttachments = NULL;
+    geometrySubpass.colorAttachmentCount
         = sizeof(colorAttachments) / sizeof(colorAttachments[0]);
-    objSubpass.pColorAttachments = colorAttachments;
-    objSubpass.pResolveAttachments = NULL;
-    objSubpass.pDepthStencilAttachment = &depthAtttachmentRef;
-    objSubpass.preserveAttachmentCount = 0;
-    objSubpass.pPreserveAttachments = NULL;
+    geometrySubpass.pColorAttachments = colorAttachments;
+    geometrySubpass.pResolveAttachments = NULL;
+    geometrySubpass.pDepthStencilAttachment = &depthAtttachmentRef;
+    geometrySubpass.preserveAttachmentCount = 0;
+    geometrySubpass.pPreserveAttachments = NULL;
 
     /* SUBPASS DEPENDENCIES */
-    VkSubpassDependency objSubpassDependency;
-    objSubpassDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    objSubpassDependency.dstSubpass = 0;
-    objSubpassDependency.srcStageMask
+    VkSubpassDependency geometrySubpassDependency;
+    geometrySubpassDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    geometrySubpassDependency.dstSubpass = 0;
+    geometrySubpassDependency.srcStageMask
         = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
         | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-    objSubpassDependency.dstStageMask
+    geometrySubpassDependency.dstStageMask
         = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
         | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
         | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-    objSubpassDependency.srcAccessMask = 0;
-    objSubpassDependency.dstAccessMask
+    geometrySubpassDependency.srcAccessMask = 0;
+    geometrySubpassDependency.dstAccessMask
         = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
         | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    objSubpassDependency.dependencyFlags = 0;
+    geometrySubpassDependency.dependencyFlags = 0;
 
     /* RENDER PASS */
     VkAttachmentDescription attachments[] = {
-        colorAttachment,
+        depthAttachment,
+        albedoAttachment,
         normalAttachment,
-        depthAttachment
     };
     VkSubpassDescription subpasses[] = {
-        objSubpass
+        geometrySubpass,
     };
     VkSubpassDependency subpassDependencies[] = {
-        objSubpassDependency,
+        geometrySubpassDependency,
     };
 
     VkRenderPassCreateInfo renderPassCreateInfo;
@@ -337,16 +473,107 @@ static void createObjRenderPass(
             &renderPassCreateInfo,
             NULL,
             renderPass),
-        "creating object render pass");
+        "creating geometry render pass");
 }
 
-static void createPipeline(
+static void createLightingRenderPass(
+    VkDevice logicalDevice,
+    VkFormat swapImageFormat,
+    VkRenderPass* renderPass)
+{
+    /* ATTACHMENTS */
+    VkAttachmentDescription swapAttachment;
+    swapAttachment.flags = 0;
+    swapAttachment.format = swapImageFormat;
+    swapAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    swapAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    swapAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    swapAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    swapAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    swapAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    swapAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    /* SUBPASS */
+    VkAttachmentReference swapAttachmentRef;
+    swapAttachmentRef.attachment = 0;
+    swapAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference colorAttachments[] = {
+        swapAttachmentRef,
+    };
+
+    VkSubpassDescription lightingSubpass;
+    lightingSubpass.flags = 0;
+    lightingSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    lightingSubpass.inputAttachmentCount = 0;
+    lightingSubpass.pInputAttachments = NULL;
+    lightingSubpass.colorAttachmentCount
+        = sizeof(colorAttachments) / sizeof(colorAttachments[0]);
+    lightingSubpass.pColorAttachments = colorAttachments;
+    lightingSubpass.pResolveAttachments = NULL;
+    lightingSubpass.pDepthStencilAttachment = NULL;
+    lightingSubpass.preserveAttachmentCount = 0;
+    lightingSubpass.pPreserveAttachments = NULL;
+
+    /* SUBPASS DEPENDENCIES */
+    VkSubpassDependency lightingSubpassDependency;
+    lightingSubpassDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    lightingSubpassDependency.dstSubpass = 0;
+    lightingSubpassDependency.srcStageMask
+        = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+        | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    lightingSubpassDependency.dstStageMask
+        = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+        | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
+        | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    lightingSubpassDependency.srcAccessMask = 0;
+    lightingSubpassDependency.dstAccessMask
+        = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    lightingSubpassDependency.dependencyFlags = 0;
+
+    /* RENDER PASS */
+    VkAttachmentDescription attachments[] = {
+        swapAttachment,
+    };
+    VkSubpassDescription subpasses[] = {
+        lightingSubpass,
+    };
+    VkSubpassDependency subpassDependencies[] = {
+        lightingSubpassDependency,
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo;
+    renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassCreateInfo.pNext = NULL;
+    renderPassCreateInfo.flags = 0;
+    renderPassCreateInfo.attachmentCount
+        = sizeof(attachments) / sizeof(attachments[0]);
+    renderPassCreateInfo.pAttachments = attachments;
+    renderPassCreateInfo.subpassCount
+        = sizeof(subpasses) / sizeof(subpasses[0]);
+    renderPassCreateInfo.pSubpasses = subpasses;
+    renderPassCreateInfo.dependencyCount
+        = sizeof(subpassDependencies) / sizeof(subpassDependencies[0]);
+    renderPassCreateInfo.pDependencies = subpassDependencies;
+
+    handleVkResult(
+        vkCreateRenderPass(
+            logicalDevice,
+            &renderPassCreateInfo,
+            NULL,
+            renderPass),
+        "creating lighting render pass");
+}
+
+static void createObjectGeometryPipeline(
     VkDevice logicalDevice,
     VkPipelineLayout layout,
-    VkRenderPass objRenderPass,
+    VkRenderPass renderPass,
+    uint32_t subpassIndex,
     VkExtent2D presentExtent,
     VkShaderModule vertShaderModule,
     VkShaderModule fragShaderModule,
+    uint32_t colorAttachmentCount,
     VkPipeline* pipeline)
 {
     /* SHADER STAGES */
@@ -420,7 +647,7 @@ static void createPipeline(
     rasterizationInfo.depthClampEnable = VK_FALSE;
     rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
     rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizationInfo.cullMode = VK_CULL_MODE_NONE;
+    rasterizationInfo.cullMode = VK_CULL_MODE_FRONT_BIT;
     rasterizationInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
     rasterizationInfo.depthBiasEnable = VK_FALSE;
     rasterizationInfo.depthBiasConstantFactor = 0.0f;
@@ -430,7 +657,8 @@ static void createPipeline(
 
     /* MULTISAMPLING */
     VkPipelineMultisampleStateCreateInfo multisamplingInfo;
-    multisamplingInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisamplingInfo.sType
+        = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
     multisamplingInfo.pNext = NULL;
     multisamplingInfo.flags = 0;
     multisamplingInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
@@ -442,7 +670,8 @@ static void createPipeline(
 
     /* DEPTH STENCIL */
     VkPipelineDepthStencilStateCreateInfo depthStencil;
-    depthStencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+    depthStencil.sType
+        = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
     depthStencil.pNext = NULL;
     depthStencil.flags = 0;
     depthStencil.depthTestEnable = VK_TRUE;
@@ -456,6 +685,180 @@ static void createPipeline(
     depthStencil.maxDepthBounds = 1.0f;
 
     /* COLOR BLENDING */
+    VkPipelineColorBlendAttachmentState* blendAttachments
+        = (VkPipelineColorBlendAttachmentState*)malloc(
+            colorAttachmentCount * sizeof(VkPipelineColorBlendAttachmentState));
+    for (
+        uint32_t i = 0;
+        i < colorAttachmentCount;
+        i++) {
+        blendAttachments[i].blendEnable = VK_FALSE;
+        blendAttachments[i].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+        blendAttachments[i].dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+        blendAttachments[i].colorBlendOp = VK_BLEND_OP_ADD;
+        blendAttachments[i].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+        blendAttachments[i].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+        blendAttachments[i].alphaBlendOp = VK_BLEND_OP_ADD;
+        blendAttachments[i].colorWriteMask
+            = VK_COLOR_COMPONENT_R_BIT
+            | VK_COLOR_COMPONENT_G_BIT
+            | VK_COLOR_COMPONENT_B_BIT
+            | VK_COLOR_COMPONENT_A_BIT;
+    }
+
+    VkPipelineColorBlendStateCreateInfo colorBlendInfo;
+    colorBlendInfo.sType
+        = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlendInfo.pNext = NULL;
+    colorBlendInfo.flags = 0;
+    colorBlendInfo.logicOpEnable = VK_FALSE;
+    colorBlendInfo.logicOp = VK_LOGIC_OP_COPY;
+    colorBlendInfo.attachmentCount = colorAttachmentCount;
+    colorBlendInfo.pAttachments = blendAttachments;
+    colorBlendInfo.blendConstants[0] = 0.0f;
+    colorBlendInfo.blendConstants[1] = 0.0f;
+    colorBlendInfo.blendConstants[2] = 0.0f;
+    colorBlendInfo.blendConstants[3] = 0.0f;
+
+    /* GRAPHICS PIPELINE */
+    VkGraphicsPipelineCreateInfo pipelineCreateInfo;
+    pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    pipelineCreateInfo.pNext = NULL;
+    pipelineCreateInfo.flags = 0;
+    VkPipelineShaderStageCreateInfo shaderStages[]
+        = { vertShaderStage, fragShaderStage };
+    pipelineCreateInfo.stageCount
+        = sizeof(shaderStages) / sizeof(shaderStages[0]);
+    pipelineCreateInfo.pStages = shaderStages;
+    pipelineCreateInfo.pVertexInputState = &vertexInputInfo;
+    pipelineCreateInfo.pInputAssemblyState = &inputAssemblyInfo;
+    pipelineCreateInfo.pTessellationState = NULL;
+    pipelineCreateInfo.pViewportState = &viewportInfo;
+    pipelineCreateInfo.pRasterizationState = &rasterizationInfo;
+    pipelineCreateInfo.pMultisampleState = &multisamplingInfo;
+    pipelineCreateInfo.pDepthStencilState = &depthStencil;
+    pipelineCreateInfo.pColorBlendState = &colorBlendInfo;
+    pipelineCreateInfo.pDynamicState = NULL;
+    pipelineCreateInfo.layout = layout;
+    pipelineCreateInfo.renderPass = renderPass;
+    pipelineCreateInfo.subpass = subpassIndex;
+    pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
+    pipelineCreateInfo.basePipelineIndex = 0;
+
+    handleVkResult(
+        vkCreateGraphicsPipelines(
+            logicalDevice,
+            VK_NULL_HANDLE,
+            1,
+            &pipelineCreateInfo,
+            NULL,
+            pipeline),
+        "creating object geometry pipeline");
+    free(blendAttachments);
+}
+
+static void createLightingPipeline(
+    VkDevice logicalDevice,
+    VkPipelineLayout layout,
+    VkRenderPass renderPass,
+    uint32_t subpassIndex,
+    VkExtent2D presentExtent,
+    VkShaderModule vertShaderModule,
+    VkShaderModule fragShaderModule,
+    VkPipeline* pipeline)
+{
+    /* SHADER STAGES */
+    VkPipelineShaderStageCreateInfo vertShaderStage;
+    vertShaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    vertShaderStage.pNext = NULL;
+    vertShaderStage.flags = 0;
+    vertShaderStage.stage = VK_SHADER_STAGE_VERTEX_BIT;
+    vertShaderStage.module = vertShaderModule;
+    vertShaderStage.pName = "main";
+    vertShaderStage.pSpecializationInfo = NULL;
+    VkPipelineShaderStageCreateInfo fragShaderStage;
+    fragShaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    fragShaderStage.pNext = NULL;
+    fragShaderStage.flags = 0;
+    fragShaderStage.stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    fragShaderStage.module = fragShaderModule;
+    fragShaderStage.pName = "main";
+    fragShaderStage.pSpecializationInfo = NULL;
+
+    /* VERTEX INPUT */
+    VkPipelineVertexInputStateCreateInfo vertexInputInfo;
+    vertexInputInfo.sType
+        = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vertexInputInfo.pNext = NULL;
+    vertexInputInfo.flags = 0;
+    vertexInputInfo.vertexBindingDescriptionCount = 0;
+    vertexInputInfo.pVertexBindingDescriptions = NULL;
+    vertexInputInfo.vertexAttributeDescriptionCount = 0;
+    vertexInputInfo.pVertexAttributeDescriptions = NULL;
+
+    /* INPUT ASSEMBLY */
+    VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo;
+    inputAssemblyInfo.sType
+        = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    inputAssemblyInfo.pNext = NULL;
+    inputAssemblyInfo.flags = 0;
+    inputAssemblyInfo.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+    inputAssemblyInfo.primitiveRestartEnable = VK_FALSE;
+
+    /* VIEWPORT */
+    VkViewport viewport;
+    viewport.x = 0.0f;
+    viewport.y = 0.0f;
+    viewport.width = (float)presentExtent.width;
+    viewport.height = (float)presentExtent.height;
+    viewport.minDepth = 0.0f;
+    viewport.maxDepth = 1.0f;
+
+    VkRect2D scissor;
+    scissor.offset.x = 0;
+    scissor.offset.y = 0;
+    scissor.extent = presentExtent;
+
+    VkPipelineViewportStateCreateInfo viewportInfo;
+    viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    viewportInfo.pNext = NULL;
+    viewportInfo.flags = 0;
+    viewportInfo.viewportCount = 1;
+    viewportInfo.pViewports = &viewport;
+    viewportInfo.scissorCount = 1;
+    viewportInfo.pScissors = &scissor;
+
+    /* RASTERIZATION */
+    VkPipelineRasterizationStateCreateInfo rasterizationInfo;
+    rasterizationInfo.sType
+        = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rasterizationInfo.pNext = NULL;
+    rasterizationInfo.flags = 0;
+    rasterizationInfo.depthClampEnable = VK_FALSE;
+    rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
+    rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
+    rasterizationInfo.cullMode = VK_CULL_MODE_BACK_BIT;
+    rasterizationInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
+    rasterizationInfo.depthBiasEnable = VK_FALSE;
+    rasterizationInfo.depthBiasConstantFactor = 0.0f;
+    rasterizationInfo.depthBiasClamp = 0.0f;
+    rasterizationInfo.depthBiasSlopeFactor = 0.0f;
+    rasterizationInfo.lineWidth = 1.0f;
+
+    /* MULTISAMPLING */
+    VkPipelineMultisampleStateCreateInfo multisamplingInfo;
+    multisamplingInfo.sType
+        = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    multisamplingInfo.pNext = NULL;
+    multisamplingInfo.flags = 0;
+    multisamplingInfo.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+    multisamplingInfo.sampleShadingEnable = VK_FALSE;
+    multisamplingInfo.minSampleShading = 0.0f;
+    multisamplingInfo.pSampleMask = NULL;
+    multisamplingInfo.alphaToCoverageEnable = VK_FALSE;
+    multisamplingInfo.alphaToOneEnable = VK_FALSE;
+
+    /* COLOR BLENDING */
     VkPipelineColorBlendAttachmentState swapBlendAttachment;
     swapBlendAttachment.blendEnable = VK_FALSE;
     swapBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
@@ -464,38 +867,24 @@ static void createPipeline(
     swapBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
     swapBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
     swapBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-    swapBlendAttachment.colorWriteMask 
-        = VK_COLOR_COMPONENT_R_BIT 
-        | VK_COLOR_COMPONENT_G_BIT 
-        | VK_COLOR_COMPONENT_B_BIT 
-        | VK_COLOR_COMPONENT_A_BIT;
-
-    VkPipelineColorBlendAttachmentState normalBlendAttachment;
-    normalBlendAttachment.blendEnable = VK_FALSE;
-    normalBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-    normalBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-    normalBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-    normalBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-    normalBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-    normalBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-    normalBlendAttachment.colorWriteMask 
-        = VK_COLOR_COMPONENT_R_BIT 
-        | VK_COLOR_COMPONENT_G_BIT 
-        | VK_COLOR_COMPONENT_B_BIT 
+    swapBlendAttachment.colorWriteMask
+        = VK_COLOR_COMPONENT_R_BIT
+        | VK_COLOR_COMPONENT_G_BIT
+        | VK_COLOR_COMPONENT_B_BIT
         | VK_COLOR_COMPONENT_A_BIT;
 
     VkPipelineColorBlendAttachmentState blendAttachments[] = {
         swapBlendAttachment,
-        normalBlendAttachment
     };
 
     VkPipelineColorBlendStateCreateInfo colorBlendInfo;
-    colorBlendInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    colorBlendInfo.sType
+        = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
     colorBlendInfo.pNext = NULL;
     colorBlendInfo.flags = 0;
     colorBlendInfo.logicOpEnable = VK_FALSE;
     colorBlendInfo.logicOp = VK_LOGIC_OP_COPY;
-    colorBlendInfo.attachmentCount 
+    colorBlendInfo.attachmentCount
         = sizeof(blendAttachments) / sizeof(blendAttachments[0]);
     colorBlendInfo.pAttachments = blendAttachments;
     colorBlendInfo.blendConstants[0] = 0.0f;
@@ -508,8 +897,10 @@ static void createPipeline(
     pipelineCreateInfo.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
     pipelineCreateInfo.pNext = NULL;
     pipelineCreateInfo.flags = 0;
-    VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStage, fragShaderStage };
-    pipelineCreateInfo.stageCount = sizeof(shaderStages) / sizeof(shaderStages[0]);
+    VkPipelineShaderStageCreateInfo shaderStages[]
+        = { vertShaderStage, fragShaderStage };
+    pipelineCreateInfo.stageCount
+        = sizeof(shaderStages) / sizeof(shaderStages[0]);
     pipelineCreateInfo.pStages = shaderStages;
     pipelineCreateInfo.pVertexInputState = &vertexInputInfo;
     pipelineCreateInfo.pInputAssemblyState = &inputAssemblyInfo;
@@ -517,12 +908,12 @@ static void createPipeline(
     pipelineCreateInfo.pViewportState = &viewportInfo;
     pipelineCreateInfo.pRasterizationState = &rasterizationInfo;
     pipelineCreateInfo.pMultisampleState = &multisamplingInfo;
-    pipelineCreateInfo.pDepthStencilState = &depthStencil;
+    pipelineCreateInfo.pDepthStencilState = NULL;
     pipelineCreateInfo.pColorBlendState = &colorBlendInfo;
     pipelineCreateInfo.pDynamicState = NULL;
     pipelineCreateInfo.layout = layout;
-    pipelineCreateInfo.renderPass = objRenderPass;
-    pipelineCreateInfo.subpass = 0;
+    pipelineCreateInfo.renderPass = renderPass;
+    pipelineCreateInfo.subpass = subpassIndex;
     pipelineCreateInfo.basePipelineHandle = VK_NULL_HANDLE;
     pipelineCreateInfo.basePipelineIndex = 0;
 
@@ -534,61 +925,27 @@ static void createPipeline(
             &pipelineCreateInfo,
             NULL,
             pipeline),
-        "creating graphics pipeline");
-}
-
-static void createFramebuffers(
-    VkDevice logicalDevice,
-    VkRenderPass renderPass,
-    VkExtent2D extent,
-    uint32_t count,
-    VkImageView* swapImageViews,
-    VkImageView normalImageView,
-    VkImageView depthImageView,
-    VkFramebuffer* framebuffers)
-{
-    for (uint32_t i = 0; i < count; i++) {
-        VkImageView attachments[] = {
-            swapImageViews[i],
-            normalImageView,
-            depthImageView
-        };
-
-        VkFramebufferCreateInfo framebufferCreateInfo;
-        framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-        framebufferCreateInfo.pNext = NULL;
-        framebufferCreateInfo.flags = 0;
-        framebufferCreateInfo.renderPass = renderPass;
-        framebufferCreateInfo.attachmentCount
-            = sizeof(attachments) / sizeof(attachments[0]);
-        framebufferCreateInfo.pAttachments = attachments;
-        framebufferCreateInfo.width = extent.width;
-        framebufferCreateInfo.height = extent.height;
-        framebufferCreateInfo.layers = 1;
-
-        handleVkResult(
-            vkCreateFramebuffer(
-                logicalDevice,
-                &framebufferCreateInfo,
-                NULL,
-                &framebuffers[i]),
-            "creating framebuffer");
-    }
+        "creating lighting pipeline");
 }
 
 static void recordRenderCommandBuffers(
     VkDevice logicalDevice,
-    VkRenderPass renderPass,
     VkExtent2D presentExtent,
-    VkPipeline objPipeline,
-    VkPipelineLayout objPipelineLayout,
-    VkDescriptorSet* renderDescriptorSets,
+    VkRenderPass geometryRenderPass,
+    VkRenderPass lightingRenderPass,
+    VkPipelineLayout objGeometryPipelineLayout,
+    VkPipeline objGeometryPipeline,
+    VkPipelineLayout lightingPipelineLayout,
+    VkPipeline lightingPipeline,
+    VkDescriptorSet* cameraDescriptorSets,
+    VkDescriptorSet lightingPassDescriptorSet,
     ObjectStorage* objStorage,
     uint32_t swapLen,
-    VkFramebuffer* framebuffers,
+    VkFramebuffer geometryFramebuffer,
+    VkFramebuffer* swapImageFramebuffers,
     VkCommandBuffer* commandBuffers)
 {
-    for(int s = 0; s < swapLen; s++)
+    for (int s = 0; s < swapLen; s++)
         vkResetCommandBuffer(commandBuffers[s], 0);
     for (int s = 0; s < swapLen; s++) {
         /* BEGIN COMMAND BUFFER */
@@ -601,75 +958,139 @@ static void recordRenderCommandBuffers(
             vkBeginCommandBuffer(commandBuffers[s], &beginInfo),
             "begin recording render command buffers");
 
-        VkClearValue clearValues[3];
-        memset(clearValues, 0, sizeof(clearValues));
-        clearValues[0].color.float32[0] = 128.0f / 255.0;
-        clearValues[0].color.float32[1] = 218.0f / 255.0;
-        clearValues[0].color.float32[2] = 251.0f / 255.0;
-        clearValues[0].color.float32[3] = 1.0f;
+        /* GEOMETRY PASS */
+        {
+            VkClearValue clearValues[3];
+            memset(clearValues, 0, sizeof(clearValues));
+            clearValues[0].depthStencil.depth = 1.0f;
 
-        clearValues[2].depthStencil.depth = 1.0f;
+            VkRenderPassBeginInfo renderPassInfo;
+            renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            renderPassInfo.pNext = NULL;
+            renderPassInfo.renderPass = geometryRenderPass;
+            renderPassInfo.framebuffer = geometryFramebuffer;
+            renderPassInfo.renderArea.offset = (VkOffset2D) { 0, 0 };
+            renderPassInfo.renderArea.extent = presentExtent;
+            renderPassInfo.clearValueCount
+                = sizeof(clearValues) / sizeof(clearValues[0]);
+            renderPassInfo.pClearValues = clearValues;
 
-        VkRenderPassBeginInfo renderPassInfo;
-        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-        renderPassInfo.pNext = NULL;
-        renderPassInfo.renderPass = renderPass;
-        renderPassInfo.framebuffer = framebuffers[s];
-        renderPassInfo.renderArea.offset = (VkOffset2D) { 0, 0 };
-        renderPassInfo.renderArea.extent = presentExtent;
-        renderPassInfo.clearValueCount
-            = sizeof(clearValues) / sizeof(clearValues[0]);
-        renderPassInfo.pClearValues = clearValues;
+            vkCmdBeginRenderPass(
+                commandBuffers[s],
+                &renderPassInfo,
+                VK_SUBPASS_CONTENTS_INLINE);
 
-        vkCmdBeginRenderPass(
-            commandBuffers[s],
-            &renderPassInfo,
-            VK_SUBPASS_CONTENTS_INLINE);
+            vkCmdBindPipeline(
+                commandBuffers[s],
+                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                objGeometryPipeline);
 
-        vkCmdBindPipeline(
-            commandBuffers[s],
-            VK_PIPELINE_BIND_POINT_GRAPHICS,
-            objPipeline);
-
-        vkCmdBindDescriptorSets(
-            commandBuffers[s],
-            VK_PIPELINE_BIND_POINT_GRAPHICS,
-            objPipelineLayout,
-            0,
-            1,
-            &renderDescriptorSets[s],
-            0,
-            NULL);
-
-        VkDeviceSize voxTriVertexBufferOffsets[] = { 0 };
-        vkCmdBindVertexBuffers(
-            commandBuffers[s],
-            0,
-            1,
-            &objStorage->vertBuffer,
-            voxTriVertexBufferOffsets);
-
-        for (int o = 0; o < objStorage->filled; o++) {
             vkCmdBindDescriptorSets(
                 commandBuffers[s],
                 VK_PIPELINE_BIND_POINT_GRAPHICS,
-                objPipelineLayout,
+                objGeometryPipelineLayout,
+                0,
                 1,
-                1,
-                &objStorage->descriptorSets[o],
+                &cameraDescriptorSets[s],
                 0,
                 NULL);
-            vkCmdDraw(
+
+            VkDeviceSize voxTriVertexBufferOffsets[] = { 0 };
+            vkCmdBindVertexBuffers(
                 commandBuffers[s],
-                MAX_OBJ_VERT_COUNT,
+                0,
                 1,
-                objStorage->vertBufferOffsets[o],
-                0);
+                &objStorage->vertBuffer,
+                voxTriVertexBufferOffsets);
+
+            for (int o = 0; o < objStorage->filled; o++) {
+                vkCmdBindDescriptorSets(
+                    commandBuffers[s],
+                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                    objGeometryPipelineLayout,
+                    1,
+                    1,
+                    &objStorage->descriptorSets[o],
+                    0,
+                    NULL);
+                vkCmdDraw(
+                    commandBuffers[s],
+                    MAX_OBJ_VERT_COUNT,
+                    1,
+                    objStorage->vertBufferOffsets[o],
+                    0);
+            }
+            vkCmdEndRenderPass(commandBuffers[s]);
+        }
+
+        /* GRAPHICS -> LIGHTING : MEMORY BARRIERS */
+        VkMemoryBarrier memoryBarrier;
+        memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        memoryBarrier.pNext = NULL;
+        memoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        memoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        vkCmdPipelineBarrier(
+            commandBuffers[s],
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0,
+            1,
+            &memoryBarrier,
+            0,
+            NULL,
+            0,
+            NULL);
+
+        /* LIGHTING PASS */
+        {
+            VkClearValue clearValues[1];
+            memset(clearValues, 0, sizeof(clearValues));
+            clearValues[0].color.float32[0] = 128.0f / 255.0;
+            clearValues[0].color.float32[1] = 218.0f / 255.0;
+            clearValues[0].color.float32[2] = 251.0f / 255.0;
+            clearValues[0].color.float32[3] = 1.0f;
+
+            VkRenderPassBeginInfo renderPassInfo;
+            renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+            renderPassInfo.pNext = NULL;
+            renderPassInfo.renderPass = lightingRenderPass;
+            renderPassInfo.framebuffer = swapImageFramebuffers[s];
+            renderPassInfo.renderArea.offset = (VkOffset2D) { 0, 0 };
+            renderPassInfo.renderArea.extent = presentExtent;
+            renderPassInfo.clearValueCount
+                = sizeof(clearValues) / sizeof(clearValues[0]);
+            renderPassInfo.pClearValues = clearValues;
+
+            vkCmdBeginRenderPass(
+                commandBuffers[s],
+                &renderPassInfo,
+                VK_SUBPASS_CONTENTS_INLINE);
+
+            vkCmdBindPipeline(
+                commandBuffers[s],
+                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                lightingPipeline);
+
+            VkDescriptorSet descriptorSets[] = {
+                cameraDescriptorSets[s],
+                lightingPassDescriptorSet,
+            };
+
+            vkCmdBindDescriptorSets(
+                commandBuffers[s],
+                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                lightingPipelineLayout,
+                0,
+                sizeof(descriptorSets) / sizeof(descriptorSets[0]),
+                descriptorSets,
+                0,
+                NULL);
+
+            vkCmdDraw(commandBuffers[s], 3, 1, 0, 0);
+            vkCmdEndRenderPass(commandBuffers[s]);
         }
 
         /* END COMAND BUFFER */
-        vkCmdEndRenderPass(commandBuffers[s]);
-
         handleVkResult(
             vkEndCommandBuffer(commandBuffers[s]),
             "recording render command buffer");
@@ -685,9 +1106,9 @@ void Renderer_init(
         &renderer->objStorage,
         device->logical,
         device->physical);
-    renderer->presentExtent = presentExtent;
 
-    /* GBUFFER */
+    /* SWAPCHAIN */
+    renderer->presentExtent = presentExtent;
     renderer->swapImageFormat = device->physicalProperties.surfaceFormat.format;
     createSwapchain(
         device->logical,
@@ -746,6 +1167,7 @@ void Renderer_init(
             "creating swapchain image view");
     }
 
+    /* GBUFFER */
     renderer->depthImageFormat = device->physicalProperties.depthImageFormat;
     createDepthImage(
         device->logical,
@@ -756,8 +1178,18 @@ void Renderer_init(
         &renderer->depthImageMemory,
         &renderer->depthImageView);
 
-    renderer->normalImageFormat = VK_FORMAT_B8G8R8A8_UNORM;
-    createNormalImage(
+    renderer->albedoImageFormat = VK_FORMAT_B8G8R8A8_UNORM;
+    createColorAttachmentImage(
+        device->logical,
+        device->physical,
+        renderer->albedoImageFormat,
+        renderer->presentExtent,
+        &renderer->albedoImage,
+        &renderer->albedoImageMemory,
+        &renderer->albedoImageView);
+
+    renderer->normalImageFormat = VK_FORMAT_B8G8R8A8_SNORM;
+    createColorAttachmentImage(
         device->logical,
         device->physical,
         renderer->normalImageFormat,
@@ -766,19 +1198,69 @@ void Renderer_init(
         &renderer->normalImageMemory,
         &renderer->normalImageView);
 
+    /* GBUFFER SAMPLER */
+    {
+        VkSamplerCreateInfo createInfo;
+        createInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        createInfo.pNext = NULL;
+        createInfo.flags = 0;
+        createInfo.magFilter = VK_FILTER_NEAREST;
+        createInfo.minFilter = VK_FILTER_NEAREST;
+        createInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        createInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        createInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        createInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+        createInfo.mipLodBias = 0.0f;
+        createInfo.anisotropyEnable = VK_FALSE;
+        createInfo.maxAnisotropy = 0.0f;
+        createInfo.compareEnable = VK_FALSE;
+        createInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        createInfo.minLod = 0.0f;
+        createInfo.maxLod = 0.0f;
+        createInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+        createInfo.unnormalizedCoordinates = VK_FALSE;
+        handleVkResult(vkCreateSampler(
+                           device->logical,
+                           &createInfo,
+                           NULL,
+                           &renderer->gbufferSampler),
+            "creating gbuffer sampler");
+    }
+
+    /* CAMERA UNIFORM DESCRIPTOR SET BUFFER */
+    createBuffer(
+        device->logical,
+        device->physical,
+        renderer->swapLen * sizeof(CameraUniformData),
+        0,
+        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
+            | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
+        &renderer->cameraUniformBuffer,
+        &renderer->cameraUniformBufferMemory);
+
     /* DESCRIPTOR POOL */
     {
-        VkDescriptorPoolSize poolSize;
-        poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        poolSize.descriptorCount = renderer->swapLen;
+        VkDescriptorPoolSize ubPoolSize;
+        ubPoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        ubPoolSize.descriptorCount = renderer->swapLen;
+
+        VkDescriptorPoolSize gbufferPoolSize;
+        gbufferPoolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        gbufferPoolSize.descriptorCount = 3;
+
+        VkDescriptorPoolSize poolSizes[] = {
+            ubPoolSize,
+            gbufferPoolSize,
+        };
 
         VkDescriptorPoolCreateInfo poolCreateInfo;
         poolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolCreateInfo.pNext = NULL;
         poolCreateInfo.flags = 0;
-        poolCreateInfo.maxSets = renderer->swapLen;
-        poolCreateInfo.poolSizeCount = 1;
-        poolCreateInfo.pPoolSizes = &poolSize;
+        poolCreateInfo.maxSets = renderer->swapLen + 1;
+        poolCreateInfo.poolSizeCount = sizeof(poolSizes) / sizeof(poolSizes[0]);
+        poolCreateInfo.pPoolSizes = poolSizes;
 
         handleVkResult(
             vkCreateDescriptorPool(
@@ -789,7 +1271,7 @@ void Renderer_init(
             "creating renderer descriptor pool");
     }
 
-    /* RENDER DESCRIPTOR SET LAYOUT */
+    /* CAMERA DESCRIPTOR SETS */
     {
         VkDescriptorSetLayoutBinding uboBinding;
         uboBinding.binding = 0;
@@ -813,41 +1295,28 @@ void Renderer_init(
                 device->logical,
                 &layoutCreateInfo,
                 NULL,
-                &renderer->renderDescriptorSetLayout),
-            "creating render descriptor set layout");
+                &renderer->cameraDescriptorSetLayout),
+            "creating camera descriptor set layout");
     }
 
-    /* RENDER DESCRIPTOR SET BUFFER */
-    createBuffer(
-        device->logical,
-        device->physical,
-        renderer->swapLen * sizeof(RenderDescriptorData),
-        0,
-        VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
-            | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &renderer->renderDescriptorBuffer,
-        &renderer->renderDescriptorBufferMemory);
-
-    /* RENDER DESCRIPTOR SETS */
-    renderer->renderDescriptorSets = (VkDescriptorSet*)malloc(
+    renderer->cameraDescriptorSets = (VkDescriptorSet*)malloc(
         renderer->swapLen * sizeof(VkDescriptorSet));
     allocateDescriptorSets(
         device->logical,
-        renderer->renderDescriptorSetLayout,
+        renderer->cameraDescriptorSetLayout,
         renderer->descriptorPool,
         renderer->swapLen,
-        renderer->renderDescriptorSets);
+        renderer->cameraDescriptorSets);
     for (uint32_t i = 0; i < renderer->swapLen; i++) {
         VkDescriptorBufferInfo bufInfo;
-        bufInfo.buffer = renderer->renderDescriptorBuffer;
-        bufInfo.offset = i * sizeof(RenderDescriptorData);
-        bufInfo.range = sizeof(RenderDescriptorData);
+        bufInfo.buffer = renderer->cameraUniformBuffer;
+        bufInfo.offset = i * sizeof(CameraUniformData);
+        bufInfo.range = sizeof(CameraUniformData);
 
         VkWriteDescriptorSet write;
         write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
         write.pNext = NULL;
-        write.dstSet = renderer->renderDescriptorSets[i];
+        write.dstSet = renderer->cameraDescriptorSets[i];
         write.dstBinding = 0;
         write.dstArrayElement = 0;
         write.descriptorCount = 1;
@@ -858,18 +1327,47 @@ void Renderer_init(
         vkUpdateDescriptorSets(device->logical, 1, &write, 0, NULL);
     }
 
-    /* RENDER PASS */
-    createObjRenderPass(
+    /* LIGHTING PASS DESCRIPTOR SET */
+    VkImageView gbufferImageViews[] = {
+        renderer->depthImageView,
+        renderer->albedoImageView,
+        renderer->normalImageView,
+    };
+
+    createLightingPassDescriptorSetLayout(
+        device->logical,
+        sizeof(gbufferImageViews) / sizeof(gbufferImageViews[0]),
+        &renderer->lightingPassDescriptorSetLayout);
+
+    allocateDescriptorSets(
+        device->logical,
+        renderer->lightingPassDescriptorSetLayout,
+        renderer->descriptorPool,
+        1,
+        &renderer->lightingPassDescriptorSet);
+    updateLightingPassDescriptorSetBindings(
+        device->logical,
+        renderer->gbufferSampler,
+        sizeof(gbufferImageViews) / sizeof(gbufferImageViews[0]),
+        gbufferImageViews,
+        renderer->lightingPassDescriptorSet);
+
+    /* RENDER PASSES */
+    createGeometryRenderPass(
+        device->logical,
+        renderer->depthImageFormat,
+        renderer->albedoImageFormat,
+        renderer->normalImageFormat,
+        &renderer->geometryRenderPass);
+    createLightingRenderPass(
         device->logical,
         renderer->swapImageFormat,
-        renderer->normalImageFormat,
-        renderer->depthImageFormat,
-        &renderer->objRenderPass);
+        &renderer->lightingRenderPass);
 
-    /* PIPELINE LAYOUT */
+    /* OBJECT GEOMETRY PIPELINE LAYOUT */
     {
         VkDescriptorSetLayout pipelineDescriptorSetLayouts[] = {
-            renderer->renderDescriptorSetLayout,
+            renderer->cameraDescriptorSetLayout,
             renderer->objStorage.descriptorSetLayout,
         };
 
@@ -890,11 +1388,11 @@ void Renderer_init(
                 device->logical,
                 &pipelineLayoutCreateInfo,
                 NULL,
-                &renderer->pipelineLayout),
-            "creating pipeline layout");
+                &renderer->objGeometryPipelineLayout),
+            "creating object geometry pipeline layout");
     }
 
-    /* PIPELINE */
+    /* OBJECT GEOMETRY PIPELINE */
     {
         VkShaderModule objVertShaderModule, objFragShaderModule;
         createShaderModule(
@@ -905,14 +1403,16 @@ void Renderer_init(
             device->logical,
             "obj.frag.spv",
             &objFragShaderModule);
-        createPipeline(
+        createObjectGeometryPipeline(
             device->logical,
-            renderer->pipelineLayout,
-            renderer->objRenderPass,
+            renderer->objGeometryPipelineLayout,
+            renderer->geometryRenderPass,
+            0,
             renderer->presentExtent,
             objVertShaderModule,
             objFragShaderModule,
-            &renderer->pipeline);
+            2,
+            &renderer->objGeometryPipeline);
         vkDestroyShaderModule(
             device->logical,
             objVertShaderModule,
@@ -923,20 +1423,85 @@ void Renderer_init(
             NULL);
     }
 
+    /* LIGHTING PIPELINE LAYOUT */
+    {
+        VkDescriptorSetLayout pipelineDescriptorSetLayouts[] = {
+            renderer->cameraDescriptorSetLayout,
+            renderer->lightingPassDescriptorSetLayout
+        };
+
+        VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo;
+        pipelineLayoutCreateInfo.sType
+            = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        pipelineLayoutCreateInfo.pNext = NULL;
+        pipelineLayoutCreateInfo.flags = 0;
+        pipelineLayoutCreateInfo.setLayoutCount
+            = sizeof(pipelineDescriptorSetLayouts)
+            / sizeof(pipelineDescriptorSetLayouts[0]);
+        pipelineLayoutCreateInfo.pSetLayouts = pipelineDescriptorSetLayouts;
+        pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
+        pipelineLayoutCreateInfo.pPushConstantRanges = NULL;
+
+        handleVkResult(
+            vkCreatePipelineLayout(
+                device->logical,
+                &pipelineLayoutCreateInfo,
+                NULL,
+                &renderer->lightingPipelineLayout),
+            "creating lighting pipeline layout");
+    }
+
+    /* LIGHTING PIPELINE */
+    {
+        VkShaderModule vertShaderModule, fragShaderModule;
+        createShaderModule(
+            device->logical,
+            "lighting.vert.spv",
+            &vertShaderModule);
+        createShaderModule(
+            device->logical,
+            "lighting.frag.spv",
+            &fragShaderModule);
+        createLightingPipeline(
+            device->logical,
+            renderer->lightingPipelineLayout,
+            renderer->lightingRenderPass,
+            0,
+            renderer->presentExtent,
+            vertShaderModule,
+            fragShaderModule,
+            &renderer->lightingPipeline);
+        vkDestroyShaderModule(
+            device->logical,
+            vertShaderModule,
+            NULL);
+        vkDestroyShaderModule(
+            device->logical,
+            fragShaderModule,
+            NULL);
+    }
+
     /* FRAMEBUFFERS */
-    renderer->framebuffers
+    renderer->swapImageFramebuffers
         = (VkFramebuffer*)malloc(renderer->swapLen * sizeof(VkFramebuffer));
-    createFramebuffers(
+    createSwapImageFramebuffers(
         device->logical,
-        renderer->objRenderPass,
+        renderer->lightingRenderPass,
         renderer->presentExtent,
         renderer->swapLen,
         renderer->swapImageViews,
-        renderer->normalImageView,
-        renderer->depthImageView,
-        renderer->framebuffers);
+        renderer->swapImageFramebuffers);
 
-    /* ALLOCATE COMMAND BUFFERS */
+    createGeometryFramebuffer(
+        device->logical,
+        renderer->geometryRenderPass,
+        renderer->presentExtent,
+        renderer->depthImageView,
+        renderer->albedoImageView,
+        renderer->normalImageView,
+        &renderer->geometryFramebuffer);
+
+    /* COMMAND BUFFERS */
     renderer->commandBuffers
         = (VkCommandBuffer*)malloc(renderer->swapLen * sizeof(VkCommandBuffer));
     {
@@ -957,14 +1522,19 @@ void Renderer_init(
 
     recordRenderCommandBuffers(
         device->logical,
-        renderer->objRenderPass,
         renderer->presentExtent,
-        renderer->pipeline,
-        renderer->pipelineLayout,
-        renderer->renderDescriptorSets,
+        renderer->geometryRenderPass,
+        renderer->lightingRenderPass,
+        renderer->objGeometryPipelineLayout,
+        renderer->objGeometryPipeline,
+        renderer->lightingPipelineLayout,
+        renderer->lightingPipeline,
+        renderer->cameraDescriptorSets,
+        renderer->lightingPassDescriptorSet,
         &renderer->objStorage,
         renderer->swapLen,
-        renderer->framebuffers,
+        renderer->geometryFramebuffer,
+        renderer->swapImageFramebuffers,
         renderer->commandBuffers);
 
     /* SYNCHRONIZATION */
@@ -1021,14 +1591,19 @@ void Renderer_recreateCommandBuffers(
     vkDeviceWaitIdle(logicalDevice);
     recordRenderCommandBuffers(
         logicalDevice,
-        renderer->objRenderPass,
         renderer->presentExtent,
-        renderer->pipeline,
-        renderer->pipelineLayout,
-        renderer->renderDescriptorSets,
+        renderer->geometryRenderPass,
+        renderer->lightingRenderPass,
+        renderer->objGeometryPipelineLayout,
+        renderer->objGeometryPipeline,
+        renderer->lightingPipelineLayout,
+        renderer->lightingPipeline,
+        renderer->cameraDescriptorSets,
+        renderer->lightingPassDescriptorSet,
         &renderer->objStorage,
         renderer->swapLen,
-        renderer->framebuffers,
+        renderer->geometryFramebuffer,
+        renderer->swapImageFramebuffers,
         renderer->commandBuffers);
 }
 
@@ -1083,21 +1658,21 @@ void Renderer_drawFrame(
     renderer->swapchainImageFences[imageIndex]
         = &renderer->renderFinishedFences[renderer->currentFrame];
 
-    RenderDescriptorData* renderData;
+    CameraUniformData* cameraData;
     vkMapMemory(
         device->logical,
-        renderer->renderDescriptorBufferMemory,
-        imageIndex * sizeof(RenderDescriptorData),
-        sizeof(RenderDescriptorData),
+        renderer->cameraUniformBufferMemory,
+        imageIndex * sizeof(CameraUniformData),
+        sizeof(CameraUniformData),
         0,
-        (void**)&renderData);
+        (void**)&cameraData);
 
-    glm_mat4_copy(view, renderData->view);
-    glm_mat4_copy(proj, renderData->proj);
-    renderData->nearClip = nearClip;
-    renderData->farClip = farClip;
+    glm_mat4_copy(view, cameraData->view);
+    glm_mat4_copy(proj, cameraData->proj);
+    cameraData->nearClip = nearClip;
+    cameraData->farClip = farClip;
 
-    vkUnmapMemory(device->logical, renderer->renderDescriptorBufferMemory);
+    vkUnmapMemory(device->logical, renderer->cameraUniformBufferMemory);
 
     VkSubmitInfo submitInfo;
     submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
@@ -1151,21 +1726,37 @@ void Renderer_destroy(
     /* IMAGES AND FRAMEBUFFERS */
     for (uint32_t i = 0; i < renderer->swapLen; i++) {
         vkDestroyImageView(logicalDevice, renderer->swapImageViews[i], NULL);
-        vkDestroyFramebuffer(logicalDevice, renderer->framebuffers[i], NULL);
+        vkDestroyFramebuffer(
+            logicalDevice,
+            renderer->swapImageFramebuffers[i],
+            NULL);
     }
+    vkDestroyFramebuffer(
+        logicalDevice,
+        renderer->geometryFramebuffer,
+        NULL);
+    free(renderer->swapImages);
+    free(renderer->swapImageViews);
+    free(renderer->swapImageFramebuffers);
     vkDestroySwapchainKHR(logicalDevice, renderer->swapchain, NULL);
 
     vkDestroyImage(logicalDevice, renderer->depthImage, NULL);
     vkFreeMemory(logicalDevice, renderer->depthImageMemory, NULL);
     vkDestroyImageView(logicalDevice, renderer->depthImageView, NULL);
 
+    vkDestroyImage(logicalDevice, renderer->albedoImage, NULL);
+    vkFreeMemory(logicalDevice, renderer->albedoImageMemory, NULL);
+    vkDestroyImageView(logicalDevice, renderer->albedoImageView, NULL);
+
     vkDestroyImage(logicalDevice, renderer->normalImage, NULL);
     vkFreeMemory(logicalDevice, renderer->normalImageMemory, NULL);
     vkDestroyImageView(logicalDevice, renderer->normalImageView, NULL);
 
-    free(renderer->swapImages);
-    free(renderer->swapImageViews);
-    free(renderer->framebuffers);
+    vkDestroySampler(logicalDevice, renderer->gbufferSampler, NULL);
+
+    /* UNIFORM BUFFERS */
+    vkDestroyBuffer(logicalDevice, renderer->cameraUniformBuffer, NULL);
+    vkFreeMemory(logicalDevice, renderer->cameraUniformBufferMemory, NULL);
 
     /* DESCRIPTOR SETS */
     vkDestroyDescriptorPool(
@@ -1174,22 +1765,27 @@ void Renderer_destroy(
         NULL);
     vkDestroyDescriptorSetLayout(
         logicalDevice,
-        renderer->renderDescriptorSetLayout,
+        renderer->cameraDescriptorSetLayout,
         NULL);
-    free(renderer->renderDescriptorSets);
-    vkDestroyBuffer(
+    free(renderer->cameraDescriptorSets);
+    vkDestroyDescriptorSetLayout(
         logicalDevice,
-        renderer->renderDescriptorBuffer,
-        NULL);
-    vkFreeMemory(
-        logicalDevice,
-        renderer->renderDescriptorBufferMemory,
+        renderer->lightingPassDescriptorSetLayout,
         NULL);
 
-    /* PIPELINES */
-    vkDestroyRenderPass(logicalDevice, renderer->objRenderPass, NULL);
-    vkDestroyPipelineLayout(logicalDevice, renderer->pipelineLayout, NULL);
-    vkDestroyPipeline(logicalDevice, renderer->pipeline, NULL);
+    /* PIPELINES AND RENDER PASSES */
+    vkDestroyPipelineLayout(
+        logicalDevice,
+        renderer->objGeometryPipelineLayout,
+        NULL);
+    vkDestroyPipeline(logicalDevice, renderer->objGeometryPipeline, NULL);
+    vkDestroyPipelineLayout(
+        logicalDevice,
+        renderer->lightingPipelineLayout,
+        NULL);
+    vkDestroyPipeline(logicalDevice, renderer->lightingPipeline, NULL);
+    vkDestroyRenderPass(logicalDevice, renderer->geometryRenderPass, NULL);
+    vkDestroyRenderPass(logicalDevice, renderer->lightingRenderPass, NULL);
 
     /* COMMAND BUFFERS */
     free(renderer->commandBuffers);
