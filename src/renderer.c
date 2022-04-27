@@ -939,6 +939,7 @@ static void recordRenderCommandBuffers(
     VkPipeline lightingPipeline,
     VkDescriptorSet* cameraDescriptorSets,
     VkDescriptorSet lightingPassDescriptorSet,
+    VkDescriptorSet shadowVolumeDescriptorSet,
     ObjectStorage* objStorage,
     uint32_t swapLen,
     VkFramebuffer geometryFramebuffer,
@@ -1074,6 +1075,7 @@ static void recordRenderCommandBuffers(
             VkDescriptorSet descriptorSets[] = {
                 cameraDescriptorSets[s],
                 lightingPassDescriptorSet,
+                shadowVolumeDescriptorSet,
             };
 
             vkCmdBindDescriptorSets(
@@ -1243,22 +1245,27 @@ void Renderer_init(
     {
         VkDescriptorPoolSize ubPoolSize;
         ubPoolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        ubPoolSize.descriptorCount = renderer->swapLen;
+        ubPoolSize.descriptorCount = renderer->swapLen + 1;
 
         VkDescriptorPoolSize gbufferPoolSize;
         gbufferPoolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         gbufferPoolSize.descriptorCount = 3;
 
+        VkDescriptorPoolSize storageImagePoolSize;
+        storageImagePoolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+        storageImagePoolSize.descriptorCount = 1;
+
         VkDescriptorPoolSize poolSizes[] = {
             ubPoolSize,
             gbufferPoolSize,
+            storageImagePoolSize
         };
 
         VkDescriptorPoolCreateInfo poolCreateInfo;
         poolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolCreateInfo.pNext = NULL;
         poolCreateInfo.flags = 0;
-        poolCreateInfo.maxSets = renderer->swapLen + 1;
+        poolCreateInfo.maxSets = renderer->swapLen + 2;
         poolCreateInfo.poolSizeCount = sizeof(poolSizes) / sizeof(poolSizes[0]);
         poolCreateInfo.pPoolSizes = poolSizes;
 
@@ -1270,6 +1277,20 @@ void Renderer_init(
                 &renderer->descriptorPool),
             "creating renderer descriptor pool");
     }
+
+    /* SHADOW VOLUME */
+    ivec3 shadowVolumeSize;
+    shadowVolumeSize[0] = 256;
+    shadowVolumeSize[1] = 256;
+    shadowVolumeSize[2] = 256;
+    ShadowVolume_init(
+        &renderer->shadowVolume,
+        device->logical,
+        device->physical,
+        renderer->descriptorPool,
+        device->graphicsQueue,
+        device->transientCommandPool,
+        shadowVolumeSize);
 
     /* CAMERA DESCRIPTOR SETS */
     {
@@ -1427,7 +1448,8 @@ void Renderer_init(
     {
         VkDescriptorSetLayout pipelineDescriptorSetLayouts[] = {
             renderer->cameraDescriptorSetLayout,
-            renderer->lightingPassDescriptorSetLayout
+            renderer->lightingPassDescriptorSetLayout,
+            renderer->shadowVolume.descriptorSetLayout,
         };
 
         VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo;
@@ -1531,6 +1553,7 @@ void Renderer_init(
         renderer->lightingPipeline,
         renderer->cameraDescriptorSets,
         renderer->lightingPassDescriptorSet,
+        renderer->shadowVolume.descriptorSet,
         &renderer->objStorage,
         renderer->swapLen,
         renderer->geometryFramebuffer,
@@ -1600,6 +1623,7 @@ void Renderer_recreateCommandBuffers(
         renderer->lightingPipeline,
         renderer->cameraDescriptorSets,
         renderer->lightingPassDescriptorSet,
+        renderer->shadowVolume.descriptorSet,
         &renderer->objStorage,
         renderer->swapLen,
         renderer->geometryFramebuffer,
@@ -1722,6 +1746,7 @@ void Renderer_destroy(
 {
     /* SCENE DATA */
     ObjectStorage_destroy(&renderer->objStorage, logicalDevice);
+    ShadowVolume_destroy(&renderer->shadowVolume, logicalDevice);
 
     /* IMAGES AND FRAMEBUFFERS */
     for (uint32_t i = 0; i < renderer->swapLen; i++) {

@@ -4,8 +4,9 @@
 #include <vulkan/vulkan.h>
 #include <cglm/types.h>
 
-#include "obj_storage.h"
-#include "vk_device.h"
+#include "./vk_device.h"
+#include "./obj_storage.h"
+#include "./shadow_volume.h"
 
 #define MAX_FRAMES_IN_FLIGHT 2
 
@@ -19,6 +20,7 @@ typedef struct {
 typedef struct {
     /* SCENE DATA */
     ObjectStorage objStorage;
+    ShadowVolume shadowVolume;
 
     /* SWAPCHAIN */
     VkExtent2D presentExtent;

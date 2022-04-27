@@ -28,7 +28,7 @@ void Camera_init(Camera* camera, float aspectRatio)
     glm_vec3_zero(camera->pos);
     camera->yaw = 0;
     camera->pitch = 0;
-    camera->fov = 100;
+    camera->fov = 120;
     camera->aspectRatio = aspectRatio;
     camera->nearClip = 0.01;
     camera->farClip = 1000;

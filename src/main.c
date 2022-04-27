@@ -6,13 +6,13 @@
 
 #include "camera.h"
 #include "obj_storage.h"
+#include "open-simplex-noise.h"
 #include "renderer.h"
 #include "utils.h"
 #include "vk_device.h"
-#include "open-simplex-noise.h"
 
 const uint32_t WIDTH = 800;
-const uint32_t HEIGHT = 600;
+const uint32_t HEIGHT = 800;
 
 void glfwErrorCallback(int _, const char* errorString)
 {
@@ -68,7 +68,6 @@ int main()
         window,
         vkDevice.physicalProperties.surfaceCapabilities);
 
-
     Renderer renderer;
     Renderer_init(
         &renderer,
@@ -76,8 +75,8 @@ int main()
         presentExtent);
 
     {
-        vec3 objPos = { 1.0f, 1.0f, 10.0f };
-        ivec3 objSize = { 50, 30, 40 };
+        vec3 objPos = { 0.0f, 0.0f, 0.0f };
+        ivec3 objSize = { 255, 255, 255 };
         ObjRef objRef;
         ObjectStorage_addObjects(
             &renderer.objStorage,
@@ -92,26 +91,34 @@ int main()
 
         uint32_t objVoxCount = objSize[0] * objSize[1] * objSize[2];
         uint8_t* voxels = malloc(objVoxCount);
-        
-        struct osn_context *noiseCtx;
-        open_simplex_noise(123, &noiseCtx);
-        double noiseScale = 12;
+
+        struct osn_context* noiseCtx;
+        open_simplex_noise(432, &noiseCtx);
+        double noiseScale = 40;
 
         for (uint32_t i = 0; i < objVoxCount; i++) {
             uint32_t x = i % objSize[0];
             uint32_t y = i / objSize[0] % objSize[1];
             uint32_t z = i / objSize[0] / objSize[1];
             double noiseValue = open_simplex_noise3(
-                    noiseCtx,
-                    x / noiseScale,
-                    y / noiseScale,
-                    z / noiseScale);
+                noiseCtx,
+                x / noiseScale,
+                y / noiseScale,
+                z / noiseScale);
             if (noiseValue < 0.03) {
                 voxels[i] = 1;
             } else {
                 voxels[i] = 0;
             }
         }
+
+        ShadowVolume_splatVoxObject(
+            &renderer.shadowVolume,
+            vkDevice.logical,
+            vkDevice.graphicsQueue,
+            vkDevice.transientCommandPool,
+            objSize,
+            voxels);
         ObjectStorage_updateVoxColors(
             &renderer.objStorage,
             vkDevice.logical,
@@ -119,11 +126,14 @@ int main()
             vkDevice.graphicsQueue,
             objRef,
             voxels);
+
         free(voxels);
     }
+
+    /*
     {
         vec3 objPos = { 20.0f, -10.0f, 20.0f };
-        ivec3 objSize = { 10, 50, 10 };
+        ivec3 objSize = { 10, 110, 10 };
         ObjRef objRef;
         ObjectStorage_addObjects(
             &renderer.objStorage,
@@ -135,12 +145,12 @@ int main()
             &objPos,
             &objSize,
             &objRef);
-        
+
         uint32_t objVoxCount = objSize[0] * objSize[1] * objSize[2];
         uint8_t* voxels = malloc(objVoxCount);
 
         for (uint32_t i = 0; i < objVoxCount; i++) {
-            voxels[i] = i % 7 != 0;
+            voxels[i] = i % 6 == 0;
         }
 
         ObjectStorage_updateVoxColors(
@@ -152,7 +162,7 @@ int main()
             voxels);
         free(voxels);
     }
-
+    */
 
     Renderer_recreateCommandBuffers(&renderer, vkDevice.logical);
 

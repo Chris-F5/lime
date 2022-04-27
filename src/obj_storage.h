@@ -7,7 +7,7 @@
 #define OBJECT_CAPACITY (50)
 
 #define MAX_OBJ_VERT_COUNT 36
-#define MAX_OBJ_SCALE 128
+#define MAX_OBJ_SCALE 256
 #define MAX_OBJ_VOX_COUNT (MAX_OBJ_SCALE * MAX_OBJ_SCALE * MAX_OBJ_SCALE)
 
 typedef uint32_t ObjRef;
