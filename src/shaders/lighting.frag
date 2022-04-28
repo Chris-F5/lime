@@ -22,6 +22,7 @@ layout (location = 0) in vec2 inUV;
 layout (location = 0) out vec4 outColor;
 
 vec3 lightDir = normalize(vec3(0, -1, 1));
+uint samples = 4;
 
 uint currentSeed;
 uint randomByte()
@@ -35,21 +36,33 @@ uint randomByte()
     return (currentSeed ^ (currentSeed >> 8)) % 256;
 }
 
-float random()
+double goldenRatioMod1 = 0.61803398874989484820458683436563811772030917980576;
+dvec2 currentGoldenRandom;
+vec2 goldenRandom()
 {
-    return float(randomByte()) / 256.0;
+    currentGoldenRandom.x = mod(currentGoldenRandom.x + goldenRatioMod1, 1.0);
+    currentGoldenRandom.y = mod(currentGoldenRandom.y + goldenRatioMod1, 1.0);
+    return vec2(currentGoldenRandom);
+}
+
+vec2 randomVec2()
+{
+    // BLUEISH NOISE
+    return goldenRandom();
+
+    // WHITE NOISE
+    //return vec2(float(randomByte()) / 255.0, float(randomByte()) / 255.0);
 }
 
 vec3 cosinWeightedHemisphere()
 {
-    float u = random();
-    float v = random();
+    vec2 randPoint = randomVec2();
 
-    float radial = sqrt(u);
-    float theta = 2 * 3.141592 * v;
+    float radial = sqrt(randPoint.x);
+    float theta = 2 * 3.141592 * randPoint.y;
     float x = radial * cos(theta);
     float z = radial * sin(theta);
-    return vec3(x, sqrt(1 - u), z);
+    return vec3(x, sqrt(1 - randPoint.x), z);
 }
 
 vec3 depthToWorld(vec2 uv, float depth) {
@@ -213,6 +226,8 @@ void main() {
     currentSeed
         = int(gl_FragCoord.x + gl_FragCoord.y * 1000);
     randomByte();
+    currentGoldenRandom.x = randomByte() / 255.0;
+    currentGoldenRandom.y = randomByte() / 255.0;
 
     float depth = texture(samplerDepth, inUV).r;
     if (depth == 1) {
@@ -226,7 +241,6 @@ void main() {
 
     // TODO: world pos out of bounds of shadow volume
 
-    int samples = 32;
     float monteCarloLight = 0;
     for (int i = 0; i < samples; i++) {
         vec3 rayDir = pickRayDir(normal);
@@ -246,5 +260,6 @@ void main() {
         + normalFraction * normalLight
         + monteCarloFraction * monteCarloLight;
 
-    outColor = vec4(worldPos / 200 * light, 1.0);
+    //outColor = vec4(worldPos / 200 * light, 1.0);
+    outColor = vec4(light, light, light, 1.0);
 }
