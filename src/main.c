@@ -171,6 +171,9 @@ int main()
         / (float)renderer.presentExtent.height;
     Camera camera;
     Camera_init(&camera, aspectRatio);
+    camera.pos[0] = 40;
+    camera.pos[1] = 260;
+    camera.pos[2] = 40;
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();

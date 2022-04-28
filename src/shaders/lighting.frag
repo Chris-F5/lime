@@ -21,6 +21,37 @@ layout (location = 0) in vec2 inUV;
 
 layout (location = 0) out vec4 outColor;
 
+vec3 lightDir = normalize(vec3(0, -1, 1));
+
+uint currentSeed;
+uint randomByte()
+{
+    /* Jenkins "one at time" hash function single iteration */
+    currentSeed += ( currentSeed << 10u );
+    currentSeed ^= ( currentSeed >>  6u );
+    currentSeed += ( currentSeed <<  3u );
+    currentSeed ^= ( currentSeed >> 11u );
+    currentSeed += ( currentSeed << 15u );
+    return (currentSeed ^ (currentSeed >> 8)) % 256;
+}
+
+float random()
+{
+    return float(randomByte()) / 256.0;
+}
+
+vec3 cosinWeightedHemisphere()
+{
+    float u = random();
+    float v = random();
+
+    float radial = sqrt(u);
+    float theta = 2 * 3.141592 * v;
+    float x = radial * cos(theta);
+    float z = radial * sin(theta);
+    return vec3(x, sqrt(1 - u), z);
+}
+
 vec3 depthToWorld(vec2 uv, float depth) {
     vec4 clipSpacePosition = vec4(uv * 2.0 - 1.0, depth, 1.0);
 
@@ -29,8 +60,7 @@ vec3 depthToWorld(vec2 uv, float depth) {
 
     vec4 worldSpacePosition = inverse(view) * viewSpacePosition;
 
-    return worldSpacePosition.xyz;
-}
+    return worldSpacePosition.xyz; }
 
 bool sampleShadowVolume(ivec3 pos) {
     ivec3 texel = pos / 2;
@@ -43,17 +73,147 @@ bool sampleShadowVolume(ivec3 pos) {
     return (texDat.x & (1 << bitIndex)) > 0;
 }
 
-vec3 lightDir = normalize(vec3(0.2, -1, 0.1));
+mat3 makeRotMatFromDir(vec3 dir) {
+    vec3 right;
+    if(dir.x == 0 && dir.z == 0) {
+        right = vec3(1, 0, 0);
+    } else {
+        right = cross(dir, vec3(0, 1, 0));
+    }
+    vec3 up = cross(right, dir);
+    mat3 rotMat;
+    rotMat[0] = right;
+    rotMat[1] = dir;
+    rotMat[2] = up;
+    return rotMat;
+}
 
 vec3 pickRayDir(vec3 normal) {
-    if (dot(normal, -lightDir) > 0) {
-        return -lightDir;
-    } else {
-        return -lightDir;
+    vec3 hemisphereDir = cosinWeightedHemisphere();
+
+    mat3 rotMat = makeRotMatFromDir(normal);
+    return rotMat * hemisphereDir;
+}
+
+bool traceRay(vec3 rayDir, vec3 worldPos)
+{
+    ivec3 shadowVoxPosInt = ivec3(worldPos + rayDir / 2);
+    if(sampleShadowVolume(shadowVoxPosInt)) {
+        return true;
     }
+    bool hit = false;
+
+    /* RAY TRAVERSAL INIT */
+    ivec3 step;
+    ivec3 outOfBounds;
+    vec3 tDelta;
+    vec3 tMax;
+    if (rayDir.x > 0) {
+        step.x = 1;
+        outOfBounds.x = int(shadowVolumeSize.x);
+        tDelta.x = 1 / rayDir.x;
+        tMax.x = tDelta.x * (shadowVoxPosInt.x + 1 - worldPos.x);
+    } else if (rayDir.x < 0){
+        step.x = -1;
+        outOfBounds.x = -1;
+        tDelta.x = 1 / -rayDir.x;
+        tMax.x = tDelta.x * (worldPos.x - shadowVoxPosInt.x);
+    } else {
+        step.x = 0;
+        outOfBounds.x = -1;
+        tDelta.x = 0.0;
+        tMax.x = 1.0 / 0.0; // infinity
+    }
+
+    if (rayDir.y > 0) {
+        step.y = 1;
+        outOfBounds.y = int(shadowVolumeSize.y);
+        tDelta.y = 1 / rayDir.y;
+        tMax.y = tDelta.y * (shadowVoxPosInt.y + 1 - worldPos.y);
+    } else if (rayDir.y < 0){
+        step.y = -1;
+        outOfBounds.y = -1;
+        tDelta.y = 1 / -rayDir.y;
+        tMax.y = tDelta.y * (worldPos.y - shadowVoxPosInt.y);
+    } else {
+        step.y = 0;
+        outOfBounds.y = -1;
+        tDelta.y = 0.0;
+        tMax.y = 1.0 / 0.0; // infinity
+    }
+
+    if (rayDir.z > 0) {
+        step.z = 1;
+        outOfBounds.z = int(shadowVolumeSize.z);
+        tDelta.z = 1 / rayDir.z;
+        tMax.z = tDelta.z * (shadowVoxPosInt.z + 1 - worldPos.z);
+    } else if(rayDir.z < 0) {
+        step.z = -1;
+        outOfBounds.z = -1;
+        tDelta.z = 1 / -rayDir.z;
+        tMax.z = tDelta.z * (worldPos.z - shadowVoxPosInt.z);
+    } else {
+        step.z = 0;
+        outOfBounds.z = -1;
+        tDelta.z = 0.0;
+        tMax.z = 1.0 / 0.0; // infinity
+    }
+
+    /* RAY TRAVERSAL */
+    float t = 0;
+    while(true) {
+        if(tMax.x < tMax.y) {
+            if (tMax.x < tMax.z) {
+                shadowVoxPosInt.x += step.x;
+                t = tMax.x;
+                if (shadowVoxPosInt.x == outOfBounds.x) {
+                    break;
+                }
+                tMax.x += tDelta.x;
+            } else {
+                shadowVoxPosInt.z += step.z;
+                t = tMax.z;
+                if (shadowVoxPosInt.z == outOfBounds.z) {
+                    break;
+                }
+                tMax.z += tDelta.z;
+            }
+        } else {
+            if (tMax.y < tMax.z) {
+                shadowVoxPosInt.y += step.y;
+                t = tMax.y;
+                if (shadowVoxPosInt.y == outOfBounds.y) {
+                    break;
+                }
+                tMax.y += tDelta.y;
+            } else {
+                shadowVoxPosInt.z += step.z;
+                t = tMax.z;
+                if (shadowVoxPosInt.z == outOfBounds.z) {
+                    break;
+                }
+                tMax.z += tDelta.z;
+            }
+        }
+
+        if (sampleShadowVolume(shadowVoxPosInt)) {
+            hit = true;
+            break;
+        }
+    }
+    return hit;
+}
+
+float sampleSkyLight(vec3 rayDir) {
+    //return max(0, dot(rayDir, -lightDir)) * 2;
+    return pow((dot(rayDir, -lightDir) + 1) / 2, 2);
 }
 
 void main() {
+    currentSeed
+        = int(gl_FragCoord.x + gl_FragCoord.y * 1000);
+    randomByte();
+
     float depth = texture(samplerDepth, inUV).r;
     if (depth == 1) {
         outColor = vec4(128.0 / 255.0, 218.0 / 255.0, 251.0 / 255.0, 1.0);
@@ -64,125 +224,27 @@ void main() {
     vec3 normal = texture(samplerNormal, inUV).rgb;
     vec3 worldPos = depthToWorld(inUV, depth);
 
-    vec3 rayDir = pickRayDir(normal);
-    ivec3 shadowVoxPosInt = ivec3(worldPos + rayDir / 2);
+    // TODO: world pos out of bounds of shadow volume
 
-    // TODO: if texel pos out of bounds
-
-    float brdf = max(0, dot(normal, rayDir));
-
-    bool hit = false;
-    /* RAY */
-    if (brdf != 0) {
-
-        /* RAY TRAVERSAL INIT */
-        ivec3 step;
-        ivec3 outOfBounds;
-        vec3 tDelta;
-        vec3 tMax;
-        if (rayDir.x > 0) {
-            step.x = 1;
-            outOfBounds.x = int(shadowVolumeSize.x);
-            tDelta.x = 1 / rayDir.x;
-            tMax.x = tDelta.x * (shadowVoxPosInt.x + 1 - worldPos.x);
-        } else if (rayDir.x < 0){
-            step.x = -1;
-            outOfBounds.x = -1;
-            tDelta.x = 1 / -rayDir.x;
-            tMax.x = tDelta.x * (worldPos.x - shadowVoxPosInt.x);
-        } else {
-            step.x = 0;
-            outOfBounds.x = -1;
-            tDelta.x = 0.0;
-            tMax.x = 1.0 / 0.0; // infinity
-        }
-
-        if (rayDir.y > 0) {
-            step.y = 1;
-            outOfBounds.y = int(shadowVolumeSize.y);
-            tDelta.y = 1 / rayDir.y;
-            tMax.y = tDelta.y * (shadowVoxPosInt.y + 1 - worldPos.y);
-        } else if (rayDir.y < 0){
-            step.y = -1;
-            outOfBounds.y = -1;
-            tDelta.y = 1 / -rayDir.y;
-            tMax.y = tDelta.y * (worldPos.y - shadowVoxPosInt.y);
-        } else {
-            step.y = 0;
-            outOfBounds.y = -1;
-            tDelta.y = 0.0;
-            tMax.y = 1.0 / 0.0; // infinity
-        }
-
-        if (rayDir.z > 0) {
-            step.z = 1;
-            outOfBounds.z = int(shadowVolumeSize.z);
-            tDelta.z = 1 / rayDir.z;
-            tMax.z = tDelta.z * (shadowVoxPosInt.z + 1 - worldPos.z);
-        } else if(rayDir.z < 0) {
-            step.z = -1;
-            outOfBounds.z = -1;
-            tDelta.z = 1 / -rayDir.z;
-            tMax.z = tDelta.z * (worldPos.z - shadowVoxPosInt.z);
-        } else {
-            step.z = 0;
-            outOfBounds.z = -1;
-            tDelta.z = 0.0;
-            tMax.z = 1.0 / 0.0; // infinity
-        }
-
-        float t = 0;
-        while(true) {
-            if(tMax.x < tMax.y) {
-                if (tMax.x < tMax.z) {
-                    shadowVoxPosInt.x += step.x;
-                    t = tMax.x;
-                    if (shadowVoxPosInt.x == outOfBounds.x) {
-                        break;
-                    }
-                    tMax.x += tDelta.x;
-                } else {
-                    shadowVoxPosInt.z += step.z;
-                    t = tMax.z;
-                    if (shadowVoxPosInt.z == outOfBounds.z) {
-                        break;
-                    }
-                    tMax.z += tDelta.z;
-                }
-            } else {
-                if (tMax.y < tMax.z) {
-                    shadowVoxPosInt.y += step.y;
-                    t = tMax.y;
-                    if (shadowVoxPosInt.y == outOfBounds.y) {
-                        break;
-                    }
-                    tMax.y += tDelta.y;
-                } else {
-                    shadowVoxPosInt.z += step.z;
-                    t = tMax.z;
-                    if (shadowVoxPosInt.z == outOfBounds.z) {
-                        break;
-                    }
-                    tMax.z += tDelta.z;
-                }
-            }
-
-            if (sampleShadowVolume(shadowVoxPosInt)) {
-                hit = true;
-                break;
-            }
+    int samples = 32;
+    float monteCarloLight = 0;
+    for (int i = 0; i < samples; i++) {
+        vec3 rayDir = pickRayDir(normal);
+        if(!traceRay(rayDir, worldPos)) {
+            monteCarloLight += sampleSkyLight(rayDir);
         }
     }
+    monteCarloLight /= samples;
 
-    float ambientFraction = 0.45;
-    float normalFraction  = 0.05;
-    float directFraction  = 0.50;
+
+    float ambientFraction = 0.00;
+    float normalFraction  = 0.00;
+    float monteCarloFraction  = 1.00;
     float normalLight = dot(normal, -lightDir);
-    float directLight = hit ? 0 : brdf;
-    float light 
-        = ambientFraction 
+    float light
+        = ambientFraction
         + normalFraction * normalLight
-        + directFraction * directLight;
+        + monteCarloFraction * monteCarloLight;
 
     outColor = vec4(worldPos / 200 * light, 1.0);
 }
