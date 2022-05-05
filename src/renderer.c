@@ -221,24 +221,16 @@ static void createGeometryFramebuffer(
     VkDevice logicalDevice,
     VkRenderPass renderPass,
     VkExtent2D extent,
-    VkImageView depthImageView,
-    VkImageView albedoImageView,
-    VkImageView normalImageView,
+    uint32_t attachmentCount,
+    VkImageView* attachments,
     VkFramebuffer* framebuffer)
 {
-    VkImageView attachments[] = {
-        depthImageView,
-        albedoImageView,
-        normalImageView,
-    };
-
     VkFramebufferCreateInfo framebufferCreateInfo;
     framebufferCreateInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
     framebufferCreateInfo.pNext = NULL;
     framebufferCreateInfo.flags = 0;
     framebufferCreateInfo.renderPass = renderPass;
-    framebufferCreateInfo.attachmentCount
-        = sizeof(attachments) / sizeof(attachments[0]);
+    framebufferCreateInfo.attachmentCount = attachmentCount;
     framebufferCreateInfo.pAttachments = attachments;
     framebufferCreateInfo.width = extent.width;
     framebufferCreateInfo.height = extent.height;
@@ -1514,13 +1506,18 @@ void Renderer_init(
         renderer->swapImageViews,
         renderer->swapImageFramebuffers);
 
+    VkImageView geometryFramebufferAttachments[] = {
+        renderer->depthImageView,
+        renderer->albedoImageView,
+        renderer->normalImageView,
+    };
     createGeometryFramebuffer(
         device->logical,
         renderer->geometryRenderPass,
         renderer->presentExtent,
-        renderer->depthImageView,
-        renderer->albedoImageView,
-        renderer->normalImageView,
+        sizeof(geometryFramebufferAttachments) 
+        / sizeof(geometryFramebufferAttachments[0]),
+        geometryFramebufferAttachments,
         &renderer->geometryFramebuffer);
 
     /* COMMAND BUFFERS */
