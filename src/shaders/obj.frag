@@ -51,10 +51,20 @@ float camDistanceToDepth(float distanceFromCameraPlane)
 }
 
 uint generateSurfaceId(ivec3 objPos) {
-    return 
-        objPos.x 
+    uint id 
+        = objPos.x 
         + objPos.y * MAX_OBJ_SCALE 
         + objPos.z  * MAX_OBJ_SCALE * MAX_OBJ_SCALE;
+
+    /* TODO: improve this hashing, its important */
+
+    /* Jenkins "one at time" hash function single iteration */
+    id += ( id << 10u );
+    id ^= ( id >>  6u );
+    id += ( id <<  3u );
+    id ^= ( id >> 11u );
+    id += ( id << 15u );
+    return id;
 }
 
 void main()
