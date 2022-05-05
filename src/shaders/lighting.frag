@@ -36,8 +36,8 @@ uint randomByte()
     return (currentSeed ^ (currentSeed >> 8)) % 256;
 }
 
-double goldenRatioMod1 = 0.61803398874989484820458683436563811772030917980576;
-dvec2 currentGoldenRandom;
+float goldenRatioMod1 = 0.61803398874989484820458683436563811772030917980576;
+vec2 currentGoldenRandom;
 vec2 goldenRandom()
 {
     currentGoldenRandom.x = mod(currentGoldenRandom.x + goldenRatioMod1, 1.0);
