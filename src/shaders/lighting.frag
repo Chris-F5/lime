@@ -10,6 +10,7 @@ layout(set = 0, binding = 0) uniform GlobalUniformBuffer {
 layout(set = 1, binding = 0) uniform sampler2D samplerDepth;
 layout(set = 1, binding = 1) uniform sampler2D samplerAlbedo;
 layout(set = 1, binding = 2) uniform sampler2D samplerNormal;
+layout(set = 1, binding = 3) uniform usampler2D samplerSurfaceId;
 
 layout(set = 2, binding = 0) uniform ShadowVolumeUniformBuffer {
     ivec3 shadowVolumeSize;
@@ -238,6 +239,7 @@ void main() {
     vec3 albedo = texture(samplerAlbedo, inUV).rgb;
     vec3 normal = texture(samplerNormal, inUV).rgb;
     vec3 worldPos = depthToWorld(inUV, depth);
+    uint surfaceId = texture(samplerSurfaceId, inUV).r;
 
     // TODO: world pos out of bounds of shadow volume
 
@@ -262,4 +264,8 @@ void main() {
 
     //outColor = vec4(worldPos / 200 * light, 1.0);
     outColor = vec4(light, light, light, 1.0);
+
+    if(surfaceId % 5 == 0) {
+        outColor = vec4(1.0, 0.0, 0.0, 1.0);
+    }
 }

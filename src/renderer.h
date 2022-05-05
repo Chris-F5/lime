@@ -46,6 +46,11 @@ typedef struct {
     VkDeviceMemory normalImageMemory;
     VkImageView normalImageView;
 
+    VkFormat surfaceIdImageFormat;
+    VkImage surfaceIdImage;
+    VkDeviceMemory surfaceIdImageMemory;
+    VkImageView surfaceIdImageView;
+
     /* SAMPLERS */
     VkSampler gbufferSampler;
 

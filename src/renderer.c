@@ -365,6 +365,13 @@ static void createGeometryRenderPass(
     attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
     attachments[0].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
+    VkAttachmentReference depthAtttachmentRef;
+    depthAtttachmentRef.attachment = 0;
+    depthAtttachmentRef.layout 
+        = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference* colorAttachmentRefs = malloc(
+        attachmentCount * sizeof(VkAttachmentReference));
     for (uint32_t i = 0; i < colorAttachmentCount; i++) {
         attachments[i + 1].flags = 0;
         attachments[i + 1].format = colorAttachmentFormats[i];
@@ -375,35 +382,20 @@ static void createGeometryRenderPass(
         attachments[i + 1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         attachments[i + 1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         attachments[i + 1].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+        colorAttachmentRefs[i].attachment = i + 1;
+        colorAttachmentRefs[i].layout 
+            = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
     }
 
     /* SUBPASS */
-    VkAttachmentReference depthAtttachmentRef;
-    depthAtttachmentRef.attachment = 0;
-    depthAtttachmentRef.layout
-        = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference albedoAttachmentRef;
-    albedoAttachmentRef.attachment = 1;
-    albedoAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference normalAttachmentRef;
-    normalAttachmentRef.attachment = 2;
-    normalAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference colorAttachments[] = {
-        albedoAttachmentRef,
-        normalAttachmentRef,
-    };
-
     VkSubpassDescription geometrySubpass;
     geometrySubpass.flags = 0;
     geometrySubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
     geometrySubpass.inputAttachmentCount = 0;
     geometrySubpass.pInputAttachments = NULL;
-    geometrySubpass.colorAttachmentCount
-        = sizeof(colorAttachments) / sizeof(colorAttachments[0]);
-    geometrySubpass.pColorAttachments = colorAttachments;
+    geometrySubpass.colorAttachmentCount = colorAttachmentCount;
+    geometrySubpass.pColorAttachments = colorAttachmentRefs;
     geometrySubpass.pResolveAttachments = NULL;
     geometrySubpass.pDepthStencilAttachment = &depthAtttachmentRef;
     geometrySubpass.preserveAttachmentCount = 0;
@@ -1180,15 +1172,32 @@ void Renderer_init(
         &renderer->normalImageMemory,
         &renderer->normalImageView);
 
+    renderer->surfaceIdImageFormat = VK_FORMAT_R32_UINT;
+    createColorAttachmentImage(
+        device->logical,
+        device->physical,
+        renderer->surfaceIdImageFormat,
+        renderer->presentExtent,
+        &renderer->surfaceIdImage,
+        &renderer->surfaceIdImageMemory,
+        &renderer->surfaceIdImageView);
+
     VkImageView gbufferImageViews[] = {
         renderer->depthImageView,
         renderer->albedoImageView,
         renderer->normalImageView,
+        renderer->surfaceIdImageView,
     };
     VkFormat gbufferColorImageFormats[] = {
         renderer->albedoImageFormat,
         renderer->normalImageFormat,
+        renderer->surfaceIdImageFormat,
     };
+    uint32_t gbufferAttachmentCount 
+        = sizeof(gbufferImageViews) / sizeof(gbufferImageViews[0]);
+    uint32_t gbufferColorAttachmentCount 
+        = sizeof(gbufferColorImageFormats) 
+        / sizeof(gbufferColorImageFormats[0]);
 
 
     /* GBUFFER SAMPLER */
@@ -1240,7 +1249,7 @@ void Renderer_init(
 
         VkDescriptorPoolSize gbufferPoolSize;
         gbufferPoolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        gbufferPoolSize.descriptorCount = 3;
+        gbufferPoolSize.descriptorCount = gbufferAttachmentCount;
 
         VkDescriptorPoolSize storageImagePoolSize;
         storageImagePoolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
@@ -1417,7 +1426,7 @@ void Renderer_init(
             renderer->presentExtent,
             objVertShaderModule,
             objFragShaderModule,
-            2,
+            gbufferColorAttachmentCount,
             &renderer->objGeometryPipeline);
         vkDestroyShaderModule(
             device->logical,
@@ -1499,18 +1508,12 @@ void Renderer_init(
         renderer->swapImageViews,
         renderer->swapImageFramebuffers);
 
-    VkImageView geometryFramebufferAttachments[] = {
-        renderer->depthImageView,
-        renderer->albedoImageView,
-        renderer->normalImageView,
-    };
     createGeometryFramebuffer(
         device->logical,
         renderer->geometryRenderPass,
         renderer->presentExtent,
-        sizeof(geometryFramebufferAttachments)
-            / sizeof(geometryFramebufferAttachments[0]),
-        geometryFramebufferAttachments,
+        sizeof(gbufferImageViews) / sizeof(gbufferImageViews[0]),
+        gbufferImageViews,
         &renderer->geometryFramebuffer);
 
     /* COMMAND BUFFERS */
@@ -1766,6 +1769,10 @@ void Renderer_destroy(
     vkDestroyImage(logicalDevice, renderer->normalImage, NULL);
     vkFreeMemory(logicalDevice, renderer->normalImageMemory, NULL);
     vkDestroyImageView(logicalDevice, renderer->normalImageView, NULL);
+
+    vkDestroyImage(logicalDevice, renderer->surfaceIdImage, NULL);
+    vkFreeMemory(logicalDevice, renderer->surfaceIdImageMemory, NULL);
+    vkDestroyImageView(logicalDevice, renderer->surfaceIdImageView, NULL);
 
     vkDestroySampler(logicalDevice, renderer->gbufferSampler, NULL);
 
