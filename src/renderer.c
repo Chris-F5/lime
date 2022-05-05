@@ -365,7 +365,7 @@ static void createGeometryRenderPass(
     albedoAttachment.flags = 0;
     albedoAttachment.format = albedoImageFormat;
     albedoAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    albedoAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    albedoAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     albedoAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     albedoAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     albedoAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -376,7 +376,7 @@ static void createGeometryRenderPass(
     normalAttachment.flags = 0;
     normalAttachment.format = normalImageFormat;
     normalAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    normalAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    normalAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     normalAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
     normalAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
     normalAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
@@ -953,7 +953,7 @@ static void recordRenderCommandBuffers(
 
         /* GEOMETRY PASS */
         {
-            VkClearValue clearValues[3];
+            VkClearValue clearValues[1];
             memset(clearValues, 0, sizeof(clearValues));
             clearValues[0].depthStencil.depth = 1.0f;
 
