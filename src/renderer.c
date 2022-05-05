@@ -345,43 +345,37 @@ void updateLightingPassDescriptorSetBindings(
 static void createGeometryRenderPass(
     VkDevice logicalDevice,
     VkFormat depthImageFormat,
-    VkFormat albedoImageFormat,
-    VkFormat normalImageFormat,
+    uint32_t colorAttachmentCount,
+    VkFormat* colorAttachmentFormats,
     VkRenderPass* renderPass)
 {
     /* ATTACHMENTS */
-    VkAttachmentDescription depthAttachment;
-    depthAttachment.flags = 0;
-    depthAttachment.format = depthImageFormat;
-    depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    depthAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    depthAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    depthAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    uint32_t attachmentCount = colorAttachmentCount + 1;
+    VkAttachmentDescription* attachments = malloc(
+        attachmentCount * sizeof(VkAttachmentDescription));
 
-    VkAttachmentDescription albedoAttachment;
-    albedoAttachment.flags = 0;
-    albedoAttachment.format = albedoImageFormat;
-    albedoAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    albedoAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    albedoAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    albedoAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    albedoAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    albedoAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    albedoAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    /* depth attachment */
+    attachments[0].flags = 0;
+    attachments[0].format = depthImageFormat;
+    attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+    attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    attachments[0].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
-    VkAttachmentDescription normalAttachment;
-    normalAttachment.flags = 0;
-    normalAttachment.format = normalImageFormat;
-    normalAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    normalAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    normalAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    normalAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    normalAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    normalAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    normalAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    for (uint32_t i = 0; i < colorAttachmentCount; i++) {
+        attachments[i + 1].flags = 0;
+        attachments[i + 1].format = colorAttachmentFormats[i];
+        attachments[i + 1].samples = VK_SAMPLE_COUNT_1_BIT;
+        attachments[i + 1].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attachments[i + 1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        attachments[i + 1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        attachments[i + 1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        attachments[i + 1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        attachments[i + 1].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    }
 
     /* SUBPASS */
     VkAttachmentReference depthAtttachmentRef;
@@ -433,11 +427,6 @@ static void createGeometryRenderPass(
     geometrySubpassDependency.dependencyFlags = 0;
 
     /* RENDER PASS */
-    VkAttachmentDescription attachments[] = {
-        depthAttachment,
-        albedoAttachment,
-        normalAttachment,
-    };
     VkSubpassDescription subpasses[] = {
         geometrySubpass,
     };
@@ -449,8 +438,7 @@ static void createGeometryRenderPass(
     renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     renderPassCreateInfo.pNext = NULL;
     renderPassCreateInfo.flags = 0;
-    renderPassCreateInfo.attachmentCount
-        = sizeof(attachments) / sizeof(attachments[0]);
+    renderPassCreateInfo.attachmentCount = attachmentCount;
     renderPassCreateInfo.pAttachments = attachments;
     renderPassCreateInfo.subpassCount
         = sizeof(subpasses) / sizeof(subpasses[0]);
@@ -1192,6 +1180,17 @@ void Renderer_init(
         &renderer->normalImageMemory,
         &renderer->normalImageView);
 
+    VkImageView gbufferImageViews[] = {
+        renderer->depthImageView,
+        renderer->albedoImageView,
+        renderer->normalImageView,
+    };
+    VkFormat gbufferColorImageFormats[] = {
+        renderer->albedoImageFormat,
+        renderer->normalImageFormat,
+    };
+
+
     /* GBUFFER SAMPLER */
     {
         VkSamplerCreateInfo createInfo;
@@ -1341,12 +1340,6 @@ void Renderer_init(
     }
 
     /* LIGHTING PASS DESCRIPTOR SET */
-    VkImageView gbufferImageViews[] = {
-        renderer->depthImageView,
-        renderer->albedoImageView,
-        renderer->normalImageView,
-    };
-
     createLightingPassDescriptorSetLayout(
         device->logical,
         sizeof(gbufferImageViews) / sizeof(gbufferImageViews[0]),
@@ -1369,8 +1362,8 @@ void Renderer_init(
     createGeometryRenderPass(
         device->logical,
         renderer->depthImageFormat,
-        renderer->albedoImageFormat,
-        renderer->normalImageFormat,
+        sizeof(gbufferColorImageFormats) / sizeof(gbufferColorImageFormats[0]),
+        gbufferColorImageFormats,
         &renderer->geometryRenderPass);
     createLightingRenderPass(
         device->logical,
@@ -1515,8 +1508,8 @@ void Renderer_init(
         device->logical,
         renderer->geometryRenderPass,
         renderer->presentExtent,
-        sizeof(geometryFramebufferAttachments) 
-        / sizeof(geometryFramebufferAttachments[0]),
+        sizeof(geometryFramebufferAttachments)
+            / sizeof(geometryFramebufferAttachments[0]),
         geometryFramebufferAttachments,
         &renderer->geometryFramebuffer);
 
