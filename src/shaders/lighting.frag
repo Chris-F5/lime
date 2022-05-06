@@ -5,6 +5,7 @@ layout(set = 0, binding = 0) uniform GlobalUniformBuffer {
     mat4 proj;
     float nearClip;
     float farClip;
+    uint time;
 };
 
 layout(set = 1, binding = 0) uniform sampler2D samplerDepth;
@@ -28,7 +29,7 @@ layout (location = 0) out vec4 outColor;
 #define SURFACE_LIGHT_MAX 8388607
 
 vec3 lightDir = normalize(vec3(0, -1, 1));
-uint samples = 1;
+uint samples = 4;
 
 uint currentSeed;
 uint randomByte()
@@ -234,7 +235,7 @@ float sampleSkyLight(vec3 rayDir) {
 
 void main() {
     currentSeed
-        = int(gl_FragCoord.x + gl_FragCoord.y * 1000);
+        = int(gl_FragCoord.x + gl_FragCoord.y * 100 + time * 10000);
     randomByte();
     currentGoldenRandom.x = randomByte() / 255.0;
     currentGoldenRandom.y = randomByte() / 255.0;
@@ -266,8 +267,8 @@ void main() {
 
     float ambientFraction = 0.00;
     float normalFraction  = 0.00;
-    float monteCarloFraction = 0.00;
-    float surfaceFraction = 1.00;
+    float monteCarloFraction = 1.00;
+    float surfaceFraction = 0.00;
     float normalLight = dot(normal, -lightDir);
     float light
         = ambientFraction

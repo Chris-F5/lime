@@ -1643,6 +1643,7 @@ void Renderer_init(
         renderer->swapLen * sizeof(VkFence*));
 
     renderer->currentFrame = 0;
+    renderer->time = 0;
 }
 
 void Renderer_recreateCommandBuffers(
@@ -1733,6 +1734,7 @@ void Renderer_drawFrame(
     glm_mat4_copy(proj, cameraData->proj);
     cameraData->nearClip = nearClip;
     cameraData->farClip = farClip;
+    cameraData->time = renderer->time;
 
     vkUnmapMemory(device->logical, renderer->cameraUniformBufferMemory);
 
@@ -1776,6 +1778,7 @@ void Renderer_drawFrame(
 
     renderer->currentFrame
         = (renderer->currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
+    renderer->time += 1;
 }
 
 void Renderer_destroy(

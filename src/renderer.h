@@ -15,6 +15,7 @@ typedef struct {
     mat4 proj;
     float nearClip; // TODO : is there a way to guarantee 32 bit
     float farClip;
+    uint32_t time;
 } CameraUniformData;
 
 typedef struct {
@@ -96,6 +97,8 @@ typedef struct {
 
     VkFence** swapchainImageFences;
     int currentFrame;
+
+    uint32_t time;
 } Renderer;
 
 void Renderer_init(
