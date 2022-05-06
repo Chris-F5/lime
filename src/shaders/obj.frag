@@ -12,6 +12,7 @@ layout(set = 1, binding = 0) uniform ObjectUniformBuffer {
 };
 
 #define MAX_OBJ_SCALE 256
+#define SURFACE_LIGHT_BUFFER_COUNT 1000000
 
 layout(set = 1, binding = 1, r8ui) uniform uimage3D voxColors;
 
@@ -64,7 +65,7 @@ uint generateSurfaceId(ivec3 objPos) {
     id += ( id <<  3u );
     id ^= ( id >> 11u );
     id += ( id << 15u );
-    return id;
+    return id % SURFACE_LIGHT_BUFFER_COUNT;
 }
 
 void main()

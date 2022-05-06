@@ -8,6 +8,8 @@
 #include "utils.h"
 #include "vk_utils.h"
 
+#define SURFACE_LIGHT_BUFFER_SIZE 1000000 * 4
+
 static void createSwapchain(
     VkDevice logicalDevice,
     VkSurfaceKHR surface,
@@ -285,22 +287,29 @@ void createLightingPassDescriptorSetLayout(
     uint32_t gbufferImagesCount,
     VkDescriptorSetLayout* descriptorSetLayout)
 {
+    uint32_t bindingsCount = gbufferImagesCount + 1;
     VkDescriptorSetLayoutBinding* bindings = (VkDescriptorSetLayoutBinding*)
-        malloc(gbufferImagesCount * sizeof(VkDescriptorSetLayoutBinding));
-    for (uint32_t i = 0; i < gbufferImagesCount; i++) {
+        malloc(bindingsCount * sizeof(VkDescriptorSetLayoutBinding));
+    uint32_t i;
+    for (i = 0; i < gbufferImagesCount; i++) {
         bindings[i].binding = i;
         bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         bindings[i].descriptorCount = 1;
         bindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         bindings[i].pImmutableSamplers = NULL;
     }
+    bindings[i].binding = i;
+    bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    bindings[i].descriptorCount = 1;
+    bindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[i].pImmutableSamplers = NULL;
 
     VkDescriptorSetLayoutCreateInfo layoutCreateInfo;
     layoutCreateInfo.sType
         = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutCreateInfo.pNext = NULL;
     layoutCreateInfo.flags = 0;
-    layoutCreateInfo.bindingCount = gbufferImagesCount;
+    layoutCreateInfo.bindingCount = bindingsCount;
     layoutCreateInfo.pBindings = bindings;
 
     handleVkResult(
@@ -318,6 +327,7 @@ void updateLightingPassDescriptorSetBindings(
     VkSampler sampler,
     uint32_t gbufferImagesCount,
     VkImageView* imageViews,
+    VkBuffer surfaceLightBuffer,
     VkDescriptorSet dstSet)
 {
     VkDescriptorImageInfo* imageInfos = (VkDescriptorImageInfo*)malloc(
@@ -329,6 +339,7 @@ void updateLightingPassDescriptorSetBindings(
     }
 
     VkWriteDescriptorSet write;
+
     write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     write.pNext = NULL;
     write.dstSet = dstSet;
@@ -338,6 +349,23 @@ void updateLightingPassDescriptorSetBindings(
     write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     write.pImageInfo = imageInfos;
     write.pBufferInfo = NULL;
+    write.pTexelBufferView = NULL;
+    vkUpdateDescriptorSets(logicalDevice, 1, &write, 0, NULL);
+
+    VkDescriptorBufferInfo surfaceLightBufferInfo;
+    surfaceLightBufferInfo.buffer = surfaceLightBuffer;
+    surfaceLightBufferInfo.offset = 0;
+    surfaceLightBufferInfo.range = VK_WHOLE_SIZE;
+
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.pNext = NULL;
+    write.dstSet = dstSet;
+    write.dstBinding = gbufferImagesCount;
+    write.dstArrayElement = 0;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    write.pImageInfo = NULL;
+    write.pBufferInfo = &surfaceLightBufferInfo;
     write.pTexelBufferView = NULL;
     vkUpdateDescriptorSets(logicalDevice, 1, &write, 0, NULL);
 }
@@ -1229,6 +1257,17 @@ void Renderer_init(
             "creating gbuffer sampler");
     }
 
+    /* SURFACE LIGHT BUFFER */
+    createBuffer(
+        device->logical,
+        device->physical,
+        SURFACE_LIGHT_BUFFER_SIZE,
+        0,
+        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        &renderer->surfaceLightBuffer,
+        &renderer->surfaceLightBufferMemory);
+
     /* CAMERA UNIFORM DESCRIPTOR SET BUFFER */
     createBuffer(
         device->logical,
@@ -1255,10 +1294,15 @@ void Renderer_init(
         storageImagePoolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
         storageImagePoolSize.descriptorCount = 1;
 
+        VkDescriptorPoolSize storageBufferSize;
+        storageBufferSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        storageBufferSize.descriptorCount = 1;
+
         VkDescriptorPoolSize poolSizes[] = {
             ubPoolSize,
             gbufferPoolSize,
-            storageImagePoolSize
+            storageImagePoolSize,
+            storageBufferSize,
         };
 
         VkDescriptorPoolCreateInfo poolCreateInfo;
@@ -1365,6 +1409,7 @@ void Renderer_init(
         renderer->gbufferSampler,
         sizeof(gbufferImageViews) / sizeof(gbufferImageViews[0]),
         gbufferImageViews,
+        renderer->surfaceLightBuffer,
         renderer->lightingPassDescriptorSet);
 
     /* RENDER PASSES */
@@ -1775,6 +1820,10 @@ void Renderer_destroy(
     vkDestroyImageView(logicalDevice, renderer->surfaceIdImageView, NULL);
 
     vkDestroySampler(logicalDevice, renderer->gbufferSampler, NULL);
+
+    /* STORAGE BUFFERS */
+    vkDestroyBuffer(logicalDevice, renderer->surfaceLightBuffer, NULL);
+    vkFreeMemory(logicalDevice, renderer->surfaceLightBufferMemory, NULL);
 
     /* UNIFORM BUFFERS */
     vkDestroyBuffer(logicalDevice, renderer->cameraUniformBuffer, NULL);

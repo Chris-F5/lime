@@ -54,6 +54,10 @@ typedef struct {
     /* SAMPLERS */
     VkSampler gbufferSampler;
 
+    /* STORAGE BUFFERS */
+    VkBuffer surfaceLightBuffer;
+    VkDeviceMemory surfaceLightBufferMemory;
+
     /* UNIFORM BUFFERS */
     VkBuffer cameraUniformBuffer;
     VkDeviceMemory cameraUniformBufferMemory;

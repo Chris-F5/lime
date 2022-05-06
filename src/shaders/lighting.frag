@@ -11,6 +11,9 @@ layout(set = 1, binding = 0) uniform sampler2D samplerDepth;
 layout(set = 1, binding = 1) uniform sampler2D samplerAlbedo;
 layout(set = 1, binding = 2) uniform sampler2D samplerNormal;
 layout(set = 1, binding = 3) uniform usampler2D samplerSurfaceId;
+layout(set = 1, binding = 4) buffer SurfaceLightBuffer {
+    uint surfaceLightBuffer[];
+};
 
 layout(set = 2, binding = 0) uniform ShadowVolumeUniformBuffer {
     ivec3 shadowVolumeSize;
@@ -22,8 +25,10 @@ layout (location = 0) in vec2 inUV;
 
 layout (location = 0) out vec4 outColor;
 
+#define SURFACE_LIGHT_MAX 8388607
+
 vec3 lightDir = normalize(vec3(0, -1, 1));
-uint samples = 4;
+uint samples = 1;
 
 uint currentSeed;
 uint randomByte()
@@ -64,6 +69,10 @@ vec3 cosinWeightedHemisphere()
     float x = radial * cos(theta);
     float z = radial * sin(theta);
     return vec3(x, sqrt(1 - randPoint.x), z);
+}
+
+uint getSurfaceLight(uint surfaceId) {
+    return surfaceLightBuffer[surfaceId];
 }
 
 vec3 depthToWorld(vec2 uv, float depth) {
@@ -252,20 +261,20 @@ void main() {
     }
     monteCarloLight /= samples;
 
+    uint surfaceLightInt = getSurfaceLight(surfaceId);
+    float surfaceLight = float(surfaceLightInt) / float(SURFACE_LIGHT_MAX);
 
     float ambientFraction = 0.00;
     float normalFraction  = 0.00;
-    float monteCarloFraction  = 1.00;
+    float monteCarloFraction = 0.00;
+    float surfaceFraction = 1.00;
     float normalLight = dot(normal, -lightDir);
     float light
         = ambientFraction
         + normalFraction * normalLight
-        + monteCarloFraction * monteCarloLight;
+        + monteCarloFraction * monteCarloLight
+        + surfaceFraction * surfaceLight;
 
     //outColor = vec4(worldPos / 200 * light, 1.0);
     outColor = vec4(light, light, light, 1.0);
-
-    if(surfaceId % 5 == 0) {
-        outColor = vec4(1.0, 0.0, 0.0, 1.0);
-    }
 }
