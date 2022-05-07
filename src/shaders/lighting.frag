@@ -125,7 +125,7 @@ bool traceRay(vec3 rayDir, vec3 worldPos)
 {
     ivec3 shadowVoxPosInt = ivec3(worldPos + rayDir / 2);
     if(sampleShadowVolume(shadowVoxPosInt)) {
-        return true;
+        //return true;
     }
     bool hit = false;
 
@@ -222,7 +222,7 @@ bool traceRay(vec3 rayDir, vec3 worldPos)
             }
         }
 
-        if (sampleShadowVolume(shadowVoxPosInt)) {
+        if (sampleShadowVolume(shadowVoxPosInt) && t > 2) {
             hit = true;
             break;
         }
@@ -297,6 +297,6 @@ void main() {
         imageStore(lightAccumulateImage, ivec2(gl_FragCoord), newLightDat);
     }
 
-    //outColor = vec4(worldPos / 200 * light, 1.0);
-    outColor = vec4(light, light, light, 1.0);
+    outColor = vec4(worldPos / 200 * light, 1.0);
+    //outColor = vec4(light, light, light, 1.0);
 }
