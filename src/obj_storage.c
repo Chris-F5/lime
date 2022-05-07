@@ -7,6 +7,8 @@
 
 #include "vk_utils.h"
 
+#include "./geometry_pass.h"
+
 #define AXIS_X 0
 #define AXIS_Y 1
 #define AXIS_Z 2
@@ -17,14 +19,6 @@
 #define FACE_XN_BIT 8
 #define FACE_YN_BIT 16
 #define FACE_ZN_BIT 32
-
-const static VkVertexInputBindingDescription OBJ_VERT_BINDINGS[] = {
-    { 0, sizeof(ObjectVertex), VK_VERTEX_INPUT_RATE_VERTEX }
-};
-
-const static VkVertexInputAttributeDescription OBJ_VERT_INPUT_ATTRIBS[] = {
-    { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ObjectVertex, pos) },
-};
 
 const static VkFormat VOX_COLOR_IMAGE_FORMAT = VK_FORMAT_R8_UINT;
 
@@ -38,20 +32,6 @@ const static vec3 cubePoints[] = {
     { +1.1, +1.1, -0.1 },
     { +1.1, +1.1, +1.1 }
 };
-
-void getObjectVertexInfo(
-    uint32_t* bindingCount,
-    const VkVertexInputBindingDescription** bindings,
-    uint32_t* attributeCount,
-    const VkVertexInputAttributeDescription** attributes)
-{
-    *bindingCount = sizeof(OBJ_VERT_BINDINGS)
-        / sizeof(OBJ_VERT_BINDINGS[0]);
-    *bindings = OBJ_VERT_BINDINGS;
-    *attributeCount = sizeof(OBJ_VERT_INPUT_ATTRIBS)
-        / sizeof(OBJ_VERT_INPUT_ATTRIBS[0]);
-    *attributes = OBJ_VERT_INPUT_ATTRIBS;
-}
 
 void createHexahedronObjectVerts(
     vec3* points,

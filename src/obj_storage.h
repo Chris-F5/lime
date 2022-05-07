@@ -13,10 +13,6 @@
 typedef uint32_t ObjRef;
 
 typedef struct {
-    vec3 pos;
-} ObjectVertex;
-
-typedef struct {
     mat4 model;
 } ObjectUniformBuffer;
 
@@ -44,12 +40,6 @@ typedef struct {
     VkDescriptorPool descriptorPool;
     VkDescriptorSet* descriptorSets;
 } ObjectStorage;
-
-void getObjectVertexInfo(
-    uint32_t* bindingCount,
-    const VkVertexInputBindingDescription** bindings,
-    uint32_t* attributeCount,
-    const VkVertexInputAttributeDescription** attributes);
 
 void ObjectStorage_init(
     ObjectStorage* storage,
