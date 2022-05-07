@@ -73,7 +73,7 @@ uint generateSurfaceId(ivec3 objPos) {
 vec3 calcVoxelNormal(ivec3 voxPos)
 {
     vec3 normal = vec3(0, 0, 0);
-    int radius = 5;
+    int radius = 3;
     
     for (int x = -radius + 1; x < radius; x++)
     {

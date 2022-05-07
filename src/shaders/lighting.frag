@@ -104,9 +104,10 @@ mat3 makeRotMatFromDir(vec3 dir) {
     if(dir.x == 0 && dir.z == 0) {
         right = vec3(1, 0, 0);
     } else {
-        right = cross(dir, vec3(0, 1, 0));
+        right = normalize(cross(dir, vec3(0, 1, 0)));
     }
-    vec3 up = cross(right, dir);
+    vec3 up = normalize(cross(right, dir));
+
     mat3 rotMat;
     rotMat[0] = right;
     rotMat[1] = dir;
@@ -232,7 +233,7 @@ bool traceRay(vec3 rayDir, vec3 worldPos)
 
 float sampleSkyLight(vec3 rayDir) {
     //return max(0, dot(rayDir, -lightDir)) * 2;
-    return pow((dot(rayDir, -lightDir) + 1) / 2, 2);
+    return abs(min(1.0, (dot(rayDir, -lightDir) + 1) / 2));
 }
 
 void main() {
@@ -295,6 +296,7 @@ void main() {
         + monteCarloFraction * monteCarloLight
         + surfaceFraction * surfaceLight;
 
-    outColor = vec4(worldPos / 200 * light, 1.0);
-    //outColor = vec4(light, light, light, 1.0);
+    //outColor = vec4(worldPos / 200 * light, 1.0);
+    outColor = vec4(light, light, light, 1.0);
+    //outColor = vec4(normal, 1.0);
 }
