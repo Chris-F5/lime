@@ -1,5 +1,5 @@
-#ifndef LIME_GBUFFER_H
-#define LIME_GBUFFER_H
+#ifndef LIME_SCREEN_IMAGES_H
+#define LIME_SCREEN_IMAGES_H
 
 #include <vulkan/vulkan.h>
 
