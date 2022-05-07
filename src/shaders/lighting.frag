@@ -281,19 +281,20 @@ void main() {
     uint lightInt = int(light * 65535.0);
 
     if(movedThisFrame == 0) {
-
         uvec4 oldLightDat = imageLoad(lightAccumulateImage, ivec2(gl_FragCoord));
         uint oldLightInt = oldLightDat.r;
+        uint staticTime = oldLightDat.g;
+        float newFraction = 1.0 / float(staticTime);
 
-        uint convergeLightInt = int(lightInt * 1.0/40.0 + oldLightInt * 39.0/40.0);
+        uint convergeLightInt = int(lightInt * newFraction + oldLightInt * (1.0 - newFraction));
         float convergeLight = convergeLightInt / 65535.0;
 
-        uvec4 newLightDat = uvec4(convergeLightInt, 0, 0, 0);
+        uvec4 newLightDat = uvec4(convergeLightInt, staticTime + 1, 0, 0);
         imageStore(lightAccumulateImage, ivec2(gl_FragCoord), newLightDat);
 
         light = convergeLight;
     } else {
-        uvec4 newLightDat = uvec4(lightInt, 0, 0, 0);
+        uvec4 newLightDat = uvec4(lightInt, 1, 0, 0);
         imageStore(lightAccumulateImage, ivec2(gl_FragCoord), newLightDat);
     }
 
