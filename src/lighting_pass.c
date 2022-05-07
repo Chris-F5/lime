@@ -1,107 +1,79 @@
-#include "./geometry_pass.h"
-
-#include <stdlib.h>
-#include <string.h>
+#include "./lighting_pass.h"
 
 #include "vk_utils.h"
 
-const static VkVertexInputBindingDescription OBJ_VERT_BINDINGS[] = {
-    { 0, sizeof(ObjectVertex), VK_VERTEX_INPUT_RATE_VERTEX }
-};
-
-const static VkVertexInputAttributeDescription OBJ_VERT_INPUT_ATTRIBS[] = {
-    { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ObjectVertex, pos) },
-};
-
-void createGeometryRenderPass(
+void createLightingRenderPass(
     VkDevice logicalDevice,
-    VkFormat depthImageFormat,
-    uint32_t colorAttachmentCount,
-    VkFormat* colorAttachmentFormats,
+    VkFormat swapImageFormat,
     VkRenderPass* renderPass)
 {
     /* ATTACHMENTS */
-    uint32_t attachmentCount = colorAttachmentCount + 1;
-    VkAttachmentDescription* attachments = malloc(
-        attachmentCount * sizeof(VkAttachmentDescription));
-
-    /* depth attachment */
-    attachments[0].flags = 0;
-    attachments[0].format = depthImageFormat;
-    attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
-    attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    attachments[0].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-    VkAttachmentReference depthAtttachmentRef;
-    depthAtttachmentRef.attachment = 0;
-    depthAtttachmentRef.layout 
-        = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-    VkAttachmentReference* colorAttachmentRefs = malloc(
-        attachmentCount * sizeof(VkAttachmentReference));
-    for (uint32_t i = 0; i < colorAttachmentCount; i++) {
-        attachments[i + 1].flags = 0;
-        attachments[i + 1].format = colorAttachmentFormats[i];
-        attachments[i + 1].samples = VK_SAMPLE_COUNT_1_BIT;
-        attachments[i + 1].loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[i + 1].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-        attachments[i + 1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-        attachments[i + 1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-        attachments[i + 1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        attachments[i + 1].finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-
-        colorAttachmentRefs[i].attachment = i + 1;
-        colorAttachmentRefs[i].layout 
-            = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
-    }
+    VkAttachmentDescription swapAttachment;
+    swapAttachment.flags = 0;
+    swapAttachment.format = swapImageFormat;
+    swapAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    swapAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    swapAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    swapAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    swapAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    swapAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    swapAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
     /* SUBPASS */
-    VkSubpassDescription geometrySubpass;
-    geometrySubpass.flags = 0;
-    geometrySubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-    geometrySubpass.inputAttachmentCount = 0;
-    geometrySubpass.pInputAttachments = NULL;
-    geometrySubpass.colorAttachmentCount = colorAttachmentCount;
-    geometrySubpass.pColorAttachments = colorAttachmentRefs;
-    geometrySubpass.pResolveAttachments = NULL;
-    geometrySubpass.pDepthStencilAttachment = &depthAtttachmentRef;
-    geometrySubpass.preserveAttachmentCount = 0;
-    geometrySubpass.pPreserveAttachments = NULL;
+    VkAttachmentReference swapAttachmentRef;
+    swapAttachmentRef.attachment = 0;
+    swapAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference colorAttachments[] = {
+        swapAttachmentRef,
+    };
+
+    VkSubpassDescription lightingSubpass;
+    lightingSubpass.flags = 0;
+    lightingSubpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    lightingSubpass.inputAttachmentCount = 0;
+    lightingSubpass.pInputAttachments = NULL;
+    lightingSubpass.colorAttachmentCount
+        = sizeof(colorAttachments) / sizeof(colorAttachments[0]);
+    lightingSubpass.pColorAttachments = colorAttachments;
+    lightingSubpass.pResolveAttachments = NULL;
+    lightingSubpass.pDepthStencilAttachment = NULL;
+    lightingSubpass.preserveAttachmentCount = 0;
+    lightingSubpass.pPreserveAttachments = NULL;
 
     /* SUBPASS DEPENDENCIES */
-    VkSubpassDependency geometrySubpassDependency;
-    geometrySubpassDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
-    geometrySubpassDependency.dstSubpass = 0;
-    geometrySubpassDependency.srcStageMask
+    VkSubpassDependency lightingSubpassDependency;
+    lightingSubpassDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    lightingSubpassDependency.dstSubpass = 0;
+    lightingSubpassDependency.srcStageMask
         = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
         | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-    geometrySubpassDependency.dstStageMask
+    lightingSubpassDependency.dstStageMask
         = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
         | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
         | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
-    geometrySubpassDependency.srcAccessMask = 0;
-    geometrySubpassDependency.dstAccessMask
-        = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
-        | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-    geometrySubpassDependency.dependencyFlags = 0;
+    lightingSubpassDependency.srcAccessMask = 0;
+    lightingSubpassDependency.dstAccessMask
+        = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    lightingSubpassDependency.dependencyFlags = 0;
 
     /* RENDER PASS */
+    VkAttachmentDescription attachments[] = {
+        swapAttachment,
+    };
     VkSubpassDescription subpasses[] = {
-        geometrySubpass,
+        lightingSubpass,
     };
     VkSubpassDependency subpassDependencies[] = {
-        geometrySubpassDependency,
+        lightingSubpassDependency,
     };
 
     VkRenderPassCreateInfo renderPassCreateInfo;
     renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
     renderPassCreateInfo.pNext = NULL;
     renderPassCreateInfo.flags = 0;
-    renderPassCreateInfo.attachmentCount = attachmentCount;
+    renderPassCreateInfo.attachmentCount
+        = sizeof(attachments) / sizeof(attachments[0]);
     renderPassCreateInfo.pAttachments = attachments;
     renderPassCreateInfo.subpassCount
         = sizeof(subpasses) / sizeof(subpasses[0]);
@@ -116,10 +88,10 @@ void createGeometryRenderPass(
             &renderPassCreateInfo,
             NULL,
             renderPass),
-        "creating geometry render pass");
+        "creating lighting render pass");
 }
 
-void createObjectGeometryPipeline(
+void createLightingPipeline(
     VkDevice logicalDevice,
     VkPipelineLayout layout,
     VkRenderPass renderPass,
@@ -127,7 +99,6 @@ void createObjectGeometryPipeline(
     VkExtent2D presentExtent,
     VkShaderModule vertShaderModule,
     VkShaderModule fragShaderModule,
-    uint32_t colorAttachmentCount,
     VkPipeline* pipeline)
 {
     /* SHADER STAGES */
@@ -154,12 +125,10 @@ void createObjectGeometryPipeline(
         = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputInfo.pNext = NULL;
     vertexInputInfo.flags = 0;
-    vertexInputInfo.vertexBindingDescriptionCount 
-        = sizeof(OBJ_VERT_BINDINGS) / sizeof(OBJ_VERT_BINDINGS[0]);
-    vertexInputInfo.pVertexBindingDescriptions = OBJ_VERT_BINDINGS;
-    vertexInputInfo.vertexAttributeDescriptionCount
-        = sizeof(OBJ_VERT_INPUT_ATTRIBS) / sizeof(OBJ_VERT_INPUT_ATTRIBS[0]);
-    vertexInputInfo.pVertexAttributeDescriptions = OBJ_VERT_INPUT_ATTRIBS;
+    vertexInputInfo.vertexBindingDescriptionCount = 0;
+    vertexInputInfo.pVertexBindingDescriptions = NULL;
+    vertexInputInfo.vertexAttributeDescriptionCount = 0;
+    vertexInputInfo.pVertexAttributeDescriptions = NULL;
 
     /* INPUT ASSEMBLY */
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo;
@@ -202,7 +171,7 @@ void createObjectGeometryPipeline(
     rasterizationInfo.depthClampEnable = VK_FALSE;
     rasterizationInfo.rasterizerDiscardEnable = VK_FALSE;
     rasterizationInfo.polygonMode = VK_POLYGON_MODE_FILL;
-    rasterizationInfo.cullMode = VK_CULL_MODE_FRONT_BIT;
+    rasterizationInfo.cullMode = VK_CULL_MODE_BACK_BIT;
     rasterizationInfo.frontFace = VK_FRONT_FACE_CLOCKWISE;
     rasterizationInfo.depthBiasEnable = VK_FALSE;
     rasterizationInfo.depthBiasConstantFactor = 0.0f;
@@ -223,43 +192,24 @@ void createObjectGeometryPipeline(
     multisamplingInfo.alphaToCoverageEnable = VK_FALSE;
     multisamplingInfo.alphaToOneEnable = VK_FALSE;
 
-    /* DEPTH STENCIL */
-    VkPipelineDepthStencilStateCreateInfo depthStencil;
-    depthStencil.sType
-        = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-    depthStencil.pNext = NULL;
-    depthStencil.flags = 0;
-    depthStencil.depthTestEnable = VK_TRUE;
-    depthStencil.depthWriteEnable = VK_TRUE;
-    depthStencil.depthCompareOp = VK_COMPARE_OP_LESS;
-    depthStencil.depthBoundsTestEnable = VK_FALSE;
-    depthStencil.stencilTestEnable = VK_FALSE;
-    memset(&depthStencil.front, 0, sizeof(VkStencilOpState));
-    memset(&depthStencil.back, 0, sizeof(VkStencilOpState));
-    depthStencil.minDepthBounds = 0.0f;
-    depthStencil.maxDepthBounds = 1.0f;
-
     /* COLOR BLENDING */
-    VkPipelineColorBlendAttachmentState* blendAttachments
-        = (VkPipelineColorBlendAttachmentState*)malloc(
-            colorAttachmentCount * sizeof(VkPipelineColorBlendAttachmentState));
-    for (
-        uint32_t i = 0;
-        i < colorAttachmentCount;
-        i++) {
-        blendAttachments[i].blendEnable = VK_FALSE;
-        blendAttachments[i].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-        blendAttachments[i].dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-        blendAttachments[i].colorBlendOp = VK_BLEND_OP_ADD;
-        blendAttachments[i].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-        blendAttachments[i].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-        blendAttachments[i].alphaBlendOp = VK_BLEND_OP_ADD;
-        blendAttachments[i].colorWriteMask
-            = VK_COLOR_COMPONENT_R_BIT
-            | VK_COLOR_COMPONENT_G_BIT
-            | VK_COLOR_COMPONENT_B_BIT
-            | VK_COLOR_COMPONENT_A_BIT;
-    }
+    VkPipelineColorBlendAttachmentState swapBlendAttachment;
+    swapBlendAttachment.blendEnable = VK_FALSE;
+    swapBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    swapBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    swapBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
+    swapBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    swapBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    swapBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
+    swapBlendAttachment.colorWriteMask
+        = VK_COLOR_COMPONENT_R_BIT
+        | VK_COLOR_COMPONENT_G_BIT
+        | VK_COLOR_COMPONENT_B_BIT
+        | VK_COLOR_COMPONENT_A_BIT;
+
+    VkPipelineColorBlendAttachmentState blendAttachments[] = {
+        swapBlendAttachment,
+    };
 
     VkPipelineColorBlendStateCreateInfo colorBlendInfo;
     colorBlendInfo.sType
@@ -268,7 +218,8 @@ void createObjectGeometryPipeline(
     colorBlendInfo.flags = 0;
     colorBlendInfo.logicOpEnable = VK_FALSE;
     colorBlendInfo.logicOp = VK_LOGIC_OP_COPY;
-    colorBlendInfo.attachmentCount = colorAttachmentCount;
+    colorBlendInfo.attachmentCount
+        = sizeof(blendAttachments) / sizeof(blendAttachments[0]);
     colorBlendInfo.pAttachments = blendAttachments;
     colorBlendInfo.blendConstants[0] = 0.0f;
     colorBlendInfo.blendConstants[1] = 0.0f;
@@ -291,7 +242,7 @@ void createObjectGeometryPipeline(
     pipelineCreateInfo.pViewportState = &viewportInfo;
     pipelineCreateInfo.pRasterizationState = &rasterizationInfo;
     pipelineCreateInfo.pMultisampleState = &multisamplingInfo;
-    pipelineCreateInfo.pDepthStencilState = &depthStencil;
+    pipelineCreateInfo.pDepthStencilState = NULL;
     pipelineCreateInfo.pColorBlendState = &colorBlendInfo;
     pipelineCreateInfo.pDynamicState = NULL;
     pipelineCreateInfo.layout = layout;
@@ -308,6 +259,5 @@ void createObjectGeometryPipeline(
             &pipelineCreateInfo,
             NULL,
             pipeline),
-        "creating object geometry pipeline");
-    free(blendAttachments);
+        "creating lighting pipeline");
 }

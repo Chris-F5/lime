@@ -319,7 +319,7 @@ void copyBufferToGeneralColorImage(
         copy.bufferRowLength = 0;
         copy.bufferImageHeight = 0;
         copy.imageSubresource = subresource;
-        copy.imageOffset = (VkOffset3D){0, 0, 0};
+        copy.imageOffset = (VkOffset3D) { 0, 0, 0 };
         copy.imageExtent = imageExtent;
 
         vkCmdCopyBufferToImage(
@@ -414,4 +414,31 @@ void allocateDescriptorSets(
         "allocating descriptor sets");
 
     free(setLayoutCopies);
+}
+
+void createPipelineLayout(
+    VkDevice logicalDevice,
+    uint32_t descriptorSetLayoutCount,
+    VkDescriptorSetLayout* descriptorSetLayouts,
+    uint32_t pushConstantRangeCount,
+    VkPushConstantRange* pushConstantRanges,
+    VkPipelineLayout* pipelineLayout)
+{
+    VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo;
+    pipelineLayoutCreateInfo.sType
+        = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    pipelineLayoutCreateInfo.pNext = NULL;
+    pipelineLayoutCreateInfo.flags = 0;
+    pipelineLayoutCreateInfo.setLayoutCount = descriptorSetLayoutCount;
+    pipelineLayoutCreateInfo.pSetLayouts = descriptorSetLayouts;
+    pipelineLayoutCreateInfo.pushConstantRangeCount = pushConstantRangeCount;
+    pipelineLayoutCreateInfo.pPushConstantRanges = pushConstantRanges;
+
+    handleVkResult(
+        vkCreatePipelineLayout(
+            logicalDevice,
+            &pipelineLayoutCreateInfo,
+            NULL,
+            pipelineLayout),
+        "creating pipeline layout");
 }

@@ -925,12 +925,11 @@ void Renderer_init(
         renderer->normalImageFormat,
         renderer->surfaceIdImageFormat,
     };
-    uint32_t gbufferAttachmentCount 
+    uint32_t gbufferAttachmentCount
         = sizeof(gbufferImageViews) / sizeof(gbufferImageViews[0]);
-    uint32_t gbufferColorAttachmentCount 
-        = sizeof(gbufferColorImageFormats) 
+    uint32_t gbufferColorAttachmentCount
+        = sizeof(gbufferColorImageFormats)
         / sizeof(gbufferColorImageFormats[0]);
-
 
     /* GBUFFER SAMPLER */
     {
@@ -1129,11 +1128,19 @@ void Renderer_init(
         &renderer->lightingRenderPass);
 
     /* OBJECT GEOMETRY PIPELINE LAYOUT */
-    createObjectGeometryPipelineLayout(
-        device->logical,
-        renderer->cameraDescriptorSetLayout,
-        renderer->objStorage.descriptorSetLayout,
-        &renderer->objGeometryPipelineLayout);
+    {
+        VkDescriptorSetLayout setLayouts[] = {
+            renderer->cameraDescriptorSetLayout,
+            renderer->objStorage.descriptorSetLayout,
+        };
+        createPipelineLayout(
+            device->logical,
+            sizeof(setLayouts) / sizeof(setLayouts[0]),
+            setLayouts,
+            0,
+            NULL,
+            &renderer->objGeometryPipelineLayout);
+    }
 
     /* OBJECT GEOMETRY PIPELINE */
     {
@@ -1168,31 +1175,19 @@ void Renderer_init(
 
     /* LIGHTING PIPELINE LAYOUT */
     {
-        VkDescriptorSetLayout pipelineDescriptorSetLayouts[] = {
+        VkDescriptorSetLayout setLayouts[] = {
             renderer->cameraDescriptorSetLayout,
             renderer->lightingPassDescriptorSetLayout,
             renderer->shadowVolume.descriptorSetLayout,
         };
 
-        VkPipelineLayoutCreateInfo pipelineLayoutCreateInfo;
-        pipelineLayoutCreateInfo.sType
-            = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutCreateInfo.pNext = NULL;
-        pipelineLayoutCreateInfo.flags = 0;
-        pipelineLayoutCreateInfo.setLayoutCount
-            = sizeof(pipelineDescriptorSetLayouts)
-            / sizeof(pipelineDescriptorSetLayouts[0]);
-        pipelineLayoutCreateInfo.pSetLayouts = pipelineDescriptorSetLayouts;
-        pipelineLayoutCreateInfo.pushConstantRangeCount = 0;
-        pipelineLayoutCreateInfo.pPushConstantRanges = NULL;
-
-        handleVkResult(
-            vkCreatePipelineLayout(
-                device->logical,
-                &pipelineLayoutCreateInfo,
-                NULL,
-                &renderer->lightingPipelineLayout),
-            "creating lighting pipeline layout");
+        createPipelineLayout(
+            device->logical,
+            sizeof(setLayouts) / sizeof(setLayouts[0]),
+            setLayouts,
+            0,
+            NULL,
+            &renderer->lightingPipelineLayout);
     }
 
     /* LIGHTING PIPELINE */

@@ -62,4 +62,12 @@ void allocateDescriptorSets(
     uint32_t count,
     VkDescriptorSet* descriptorSets);
 
+void createPipelineLayout(
+    VkDevice logicalDevice,
+    uint32_t descriptorSetLayoutCount,
+    VkDescriptorSetLayout* descriptorSetLayouts,
+    uint32_t pushConstantRangeCount,
+    VkPushConstantRange* pushConstantRanges,
+    VkPipelineLayout* pipelineLayout);
+
 #endif
