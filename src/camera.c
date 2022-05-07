@@ -34,20 +34,31 @@ void Camera_init(Camera* camera, float aspectRatio)
     camera->farClip = 1000;
 }
 
-void Camera_userInput(Camera* camera, GLFWwindow* window)
+bool Camera_userInput(Camera* camera, GLFWwindow* window)
 {
-    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS)
+    bool input = false;
+    if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
         camera->yaw -= rotSpeed;
-    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS)
+        input = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
         camera->yaw += rotSpeed;
-    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS)
+        input = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
         camera->pitch += rotSpeed;
-    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS)
+        input = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
         camera->pitch -= rotSpeed;
-    if (camera->pitch > 89.9f)
+        input = true;
+    }
+    if (camera->pitch > 89.9f) {
         camera->pitch = 89.9f;
-    if (camera->pitch < -89.9f)
+    }
+    if (camera->pitch < -89.9f) {
         camera->pitch = -89.9f;
+    }
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
         vec3 forward;
         Camera_forward(camera, forward);
@@ -55,6 +66,7 @@ void Camera_userInput(Camera* camera, GLFWwindow* window)
         glm_normalize(forward);
         glm_vec3_scale(forward, moveSpeed, forward);
         glm_vec3_add(camera->pos, forward, camera->pos);
+        input = true;
     }
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
         vec3 forward;
@@ -63,23 +75,31 @@ void Camera_userInput(Camera* camera, GLFWwindow* window)
         glm_normalize(forward);
         glm_vec3_scale(forward, -moveSpeed, forward);
         glm_vec3_add(camera->pos, forward, camera->pos);
+        input = true;
     }
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
         vec3 right;
         Camera_right(camera, right);
         glm_vec3_scale(right, moveSpeed, right);
         glm_vec3_add(camera->pos, right, camera->pos);
+        input = true;
     }
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
         vec3 right;
         Camera_right(camera, right);
         glm_vec3_scale(right, -moveSpeed, right);
         glm_vec3_add(camera->pos, right, camera->pos);
+        input = true;
     }
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS) {
         camera->pos[1] += moveSpeed;
-    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+        input = true;
+    }
+    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS) {
         camera->pos[1] -= moveSpeed;
+        input = true;
+    }
+    return input;
 }
 
 void Camera_viewMat(Camera* camera, mat4 view)

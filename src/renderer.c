@@ -916,7 +916,8 @@ void Renderer_drawFrame(
     mat4 view,
     mat4 proj,
     float nearClip,
-    float farClip)
+    float farClip,
+    bool movedThisFrame)
 {
     handleVkResult(
         vkWaitForFences(
@@ -975,6 +976,9 @@ void Renderer_drawFrame(
     cameraData->nearClip = nearClip;
     cameraData->farClip = farClip;
     cameraData->time = renderer->time;
+    cameraData->movedThisFrame = 0;
+    if(movedThisFrame)
+        cameraData->movedThisFrame = 1;
 
     vkUnmapMemory(device->logical, renderer->cameraUniformBufferMemory);
 

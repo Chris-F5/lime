@@ -177,7 +177,7 @@ int main()
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
-        Camera_userInput(&camera, window);
+        bool movedThisFrame = Camera_userInput(&camera, window);
 
         mat4 view, proj;
         Camera_viewMat(&camera, view);
@@ -189,7 +189,8 @@ int main()
             view,
             proj,
             camera.nearClip,
-            camera.farClip);
+            camera.farClip,
+            movedThisFrame);
     }
 
     vkDeviceWaitIdle(vkDevice.logical);

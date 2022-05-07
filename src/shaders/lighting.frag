@@ -6,6 +6,7 @@ layout(set = 0, binding = 0) uniform GlobalUniformBuffer {
     float nearClip;
     float farClip;
     uint time;
+    uint movedThisFrame;
 };
 
 layout(set = 1, binding = 0) uniform sampler2D samplerDepth;
@@ -87,16 +88,16 @@ vec3 depthToWorld(vec2 uv, float depth) {
 
     return worldSpacePosition.xyz; }
 
-bool sampleShadowVolume(ivec3 pos) {
-    ivec3 texel = pos / 2;
-    uint bitIndex
-        = (pos.x % 2)
-        + (pos.y % 2) * 2
-        + (pos.z % 2) * 4;
-    uvec4 texDat = imageLoad(shadowVolume, texel);
-    //return texDat.x > 0;
-    return (texDat.x & (1 << bitIndex)) > 0;
-}
+    bool sampleShadowVolume(ivec3 pos) {
+        ivec3 texel = pos / 2;
+        uint bitIndex
+            = (pos.x % 2)
+            + (pos.y % 2) * 2
+            + (pos.z % 2) * 4;
+        uvec4 texDat = imageLoad(shadowVolume, texel);
+        //return texDat.x > 0;
+        return (texDat.x & (1 << bitIndex)) > 0;
+    }
 
 mat3 makeRotMatFromDir(vec3 dir) {
     vec3 right;
@@ -279,16 +280,22 @@ void main() {
 
     uint lightInt = int(light * 65535.0);
 
-    uvec4 oldLightDat = imageLoad(lightAccumulateImage, ivec2(gl_FragCoord));
-    uint oldLightInt = oldLightDat.r;
+    if(movedThisFrame == 0) {
 
-    uint convergeLightInt = int(lightInt * 1.0/40.0 + oldLightInt * 39.0/40.0);
-    float convergeLight = convergeLightInt / 65535.0;
-    
-    uvec4 newLightDat = uvec4(convergeLightInt, 0, 0, 0);
-    imageStore(lightAccumulateImage, ivec2(gl_FragCoord), newLightDat);
+        uvec4 oldLightDat = imageLoad(lightAccumulateImage, ivec2(gl_FragCoord));
+        uint oldLightInt = oldLightDat.r;
 
-    light = convergeLight;
+        uint convergeLightInt = int(lightInt * 1.0/40.0 + oldLightInt * 39.0/40.0);
+        float convergeLight = convergeLightInt / 65535.0;
+
+        uvec4 newLightDat = uvec4(convergeLightInt, 0, 0, 0);
+        imageStore(lightAccumulateImage, ivec2(gl_FragCoord), newLightDat);
+
+        light = convergeLight;
+    } else {
+        uvec4 newLightDat = uvec4(lightInt, 0, 0, 0);
+        imageStore(lightAccumulateImage, ivec2(gl_FragCoord), newLightDat);
+    }
 
     //outColor = vec4(worldPos / 200 * light, 1.0);
     outColor = vec4(light, light, light, 1.0);

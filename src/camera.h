@@ -1,6 +1,8 @@
 #ifndef CAMERA_H
 #define CAMERA_H
 
+#include <stdbool.h>
+
 #include <cglm/types.h>
 
 #include <GLFW/glfw3.h>
@@ -21,7 +23,7 @@ void Camera_forward(const Camera* camera, vec3 forward);
 
 void Camera_right(const Camera* camera, vec3 right);
 
-void Camera_userInput(Camera* camera, GLFWwindow* window);
+bool Camera_userInput(Camera* camera, GLFWwindow* window);
 
 void Camera_viewMat(Camera* camera, mat4 view);
 

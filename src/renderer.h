@@ -16,6 +16,7 @@ typedef struct {
     float nearClip; // TODO : is there a way to guarantee 32 bit
     float farClip;
     uint32_t time;
+    uint32_t movedThisFrame;
 } CameraUniformData;
 
 typedef struct {
@@ -121,7 +122,8 @@ void Renderer_drawFrame(
     mat4 view,
     mat4 proj,
     float nearClip,
-    float farClip);
+    float farClip,
+    bool movedThisFrame);
 
 void Renderer_destroy(
     Renderer* renderer,
