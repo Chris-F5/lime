@@ -69,6 +69,29 @@ uint generateSurfaceId(ivec3 objPos) {
     return id % SURFACE_LIGHT_BUFFER_COUNT;
 }
 
+vec3 calcVoxelNormal(ivec3 voxPos)
+{
+    vec3 normal = vec3(0, 0, 0);
+    int radius = 5;
+    
+    for (int x = -radius + 1; x < radius; x++)
+    {
+        for (int y = -radius + 1; y < radius; y++)
+        {
+            for (int z = -radius + 1; z < radius; z++)
+            {
+                ivec3 samplePos = ivec3(voxPos.x + x, voxPos.y + y, voxPos.z + z);
+                if (imageLoad(voxColors, samplePos).r != 0) 
+                {
+                    normal += vec3(x, y, z);
+                }
+            }
+        }
+    }
+
+    return -normalize(normal);
+}
+
 void main()
 {
     vec3 scale = vec3(model[0][0], model[1][1], model[2][2]);
@@ -211,9 +234,11 @@ void main()
         }
     }
 
+
     if(hit == 0) {
         writeDepth(1);
     } else {
+        hitNormal = calcVoxelNormal(objPosInt);
         float distanceFromCameraPlane = t * dot(camDir, dir);
         writeDepth(camDistanceToDepth(distanceFromCameraPlane));
         writeAlbedo(vec3(1.0, 0.0, 0.0));
