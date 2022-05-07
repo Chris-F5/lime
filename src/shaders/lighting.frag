@@ -15,6 +15,7 @@ layout(set = 1, binding = 3) uniform usampler2D samplerSurfaceId;
 layout(set = 1, binding = 4) buffer SurfaceLightBuffer {
     uint surfaceLightBuffer[];
 };
+layout(set = 1, binding = 5, rg16ui) uniform uimage2D lightAccumulateImage;
 
 layout(set = 2, binding = 0) uniform ShadowVolumeUniformBuffer {
     ivec3 shadowVolumeSize;
@@ -275,6 +276,19 @@ void main() {
         + normalFraction * normalLight
         + monteCarloFraction * monteCarloLight
         + surfaceFraction * surfaceLight;
+
+    uint lightInt = int(light * 65535.0);
+
+    uvec4 oldLightDat = imageLoad(lightAccumulateImage, ivec2(gl_FragCoord));
+    uint oldLightInt = oldLightDat.r;
+
+    uint convergeLightInt = int(lightInt * 1.0/40.0 + oldLightInt * 39.0/40.0);
+    float convergeLight = convergeLightInt / 65535.0;
+    
+    uvec4 newLightDat = uvec4(convergeLightInt, 0, 0, 0);
+    imageStore(lightAccumulateImage, ivec2(gl_FragCoord), newLightDat);
+
+    light = convergeLight;
 
     //outColor = vec4(worldPos / 200 * light, 1.0);
     outColor = vec4(light, light, light, 1.0);

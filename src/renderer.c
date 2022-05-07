@@ -83,7 +83,7 @@ void createLightingPassDescriptorSetLayout(
     uint32_t gbufferImagesCount,
     VkDescriptorSetLayout* descriptorSetLayout)
 {
-    uint32_t bindingsCount = gbufferImagesCount + 1;
+    uint32_t bindingsCount = gbufferImagesCount + 2;
     VkDescriptorSetLayoutBinding* bindings = (VkDescriptorSetLayoutBinding*)
         malloc(bindingsCount * sizeof(VkDescriptorSetLayoutBinding));
     uint32_t i;
@@ -96,6 +96,12 @@ void createLightingPassDescriptorSetLayout(
     }
     bindings[i].binding = i;
     bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    bindings[i].descriptorCount = 1;
+    bindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+    bindings[i].pImmutableSamplers = NULL;
+    i++;
+    bindings[i].binding = i;
+    bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
     bindings[i].descriptorCount = 1;
     bindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
     bindings[i].pImmutableSamplers = NULL;
@@ -124,6 +130,7 @@ void updateLightingPassDescriptorSetBindings(
     uint32_t gbufferImagesCount,
     VkImageView* imageViews,
     VkBuffer surfaceLightBuffer,
+    VkImageView lightAccumulateImageView,
     VkDescriptorSet dstSet)
 {
     VkDescriptorImageInfo* imageInfos = (VkDescriptorImageInfo*)malloc(
@@ -162,6 +169,23 @@ void updateLightingPassDescriptorSetBindings(
     write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     write.pImageInfo = NULL;
     write.pBufferInfo = &surfaceLightBufferInfo;
+    write.pTexelBufferView = NULL;
+    vkUpdateDescriptorSets(logicalDevice, 1, &write, 0, NULL);
+
+    VkDescriptorImageInfo lightAccumulateImageInfo;
+    lightAccumulateImageInfo.sampler = NULL;
+    lightAccumulateImageInfo.imageView = lightAccumulateImageView;
+    lightAccumulateImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
+
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.pNext = NULL;
+    write.dstSet = dstSet;
+    write.dstBinding = gbufferImagesCount + 1;
+    write.dstArrayElement = 0;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+    write.pImageInfo = &lightAccumulateImageInfo;
+    write.pBufferInfo = NULL;
     write.pTexelBufferView = NULL;
     vkUpdateDescriptorSets(logicalDevice, 1, &write, 0, NULL);
 }
@@ -497,6 +521,17 @@ void Renderer_init(
         &renderer->surfaceLightBuffer,
         &renderer->surfaceLightBufferMemory);
 
+    /* STORAGE IMAGES */
+    createLightAccumulateImage(
+        device->logical,
+        device->physical,
+        device->graphicsQueue,
+        device->transientCommandPool,
+        renderer->presentExtent,
+        &renderer->lightAccumulateImage,
+        &renderer->lightAccumulateImageMemory,
+        &renderer->lightAccumulateImageView);
+
     /* CAMERA UNIFORM DESCRIPTOR SET BUFFER */
     createBuffer(
         device->logical,
@@ -521,7 +556,7 @@ void Renderer_init(
 
         VkDescriptorPoolSize storageImagePoolSize;
         storageImagePoolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        storageImagePoolSize.descriptorCount = 1;
+        storageImagePoolSize.descriptorCount = 2;
 
         VkDescriptorPoolSize storageBufferSize;
         storageBufferSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -639,6 +674,7 @@ void Renderer_init(
         sizeof(gbufferImageViews) / sizeof(gbufferImageViews[0]),
         gbufferImageViews,
         renderer->surfaceLightBuffer,
+        renderer->lightAccumulateImageView,
         renderer->lightingPassDescriptorSet);
 
     /* RENDER PASSES */
@@ -1027,6 +1063,10 @@ void Renderer_destroy(
     vkDestroyImageView(logicalDevice, renderer->surfaceIdImageView, NULL);
 
     vkDestroySampler(logicalDevice, renderer->gbufferSampler, NULL);
+
+    vkDestroyImage(logicalDevice, renderer->lightAccumulateImage, NULL);
+    vkFreeMemory(logicalDevice, renderer->lightAccumulateImageMemory, NULL);
+    vkDestroyImageView(logicalDevice, renderer->lightAccumulateImageView, NULL);
 
     /* STORAGE BUFFERS */
     vkDestroyBuffer(logicalDevice, renderer->surfaceLightBuffer, NULL);

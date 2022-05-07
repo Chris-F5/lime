@@ -32,4 +32,14 @@ void createColorAttachmentImage(
     VkDeviceMemory* imageMemory,
     VkImageView* imageView);
 
+void createLightAccumulateImage(
+    VkDevice logicalDevice,
+    VkPhysicalDevice physicalDevice,
+    VkQueue graphicsQueue,
+    VkCommandPool transientCommandPool,
+    VkExtent2D extent,
+    VkImage* image,
+    VkDeviceMemory* imageMemory,
+    VkImageView* imageView);
+
 #endif

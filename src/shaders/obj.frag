@@ -238,7 +238,7 @@ void main()
     if(hit == 0) {
         writeDepth(1);
     } else {
-        hitNormal = calcVoxelNormal(objPosInt);
+        //hitNormal = calcVoxelNormal(objPosInt);
         float distanceFromCameraPlane = t * dot(camDir, dir);
         writeDepth(camDistanceToDepth(distanceFromCameraPlane));
         writeAlbedo(vec3(1.0, 0.0, 0.0));

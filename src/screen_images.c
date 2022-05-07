@@ -211,3 +211,91 @@ void createColorAttachmentImage(
             imageView),
         "creating color attachment image view");
 }
+
+void createLightAccumulateImage(
+    VkDevice logicalDevice,
+    VkPhysicalDevice physicalDevice,
+    VkQueue graphicsQueue,
+    VkCommandPool transientCommandPool,
+    VkExtent2D extent,
+    VkImage* image,
+    VkDeviceMemory* imageMemory,
+    VkImageView* imageView)
+{
+    VkFormat format = VK_FORMAT_R16G16_UINT;
+
+    VkExtent3D extent3D;
+    extent3D.width = extent.width;
+    extent3D.height = extent.height;
+    extent3D.depth = 1;
+
+    VkImageCreateInfo createInfo;
+    createInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    createInfo.pNext = NULL;
+    createInfo.flags = 0;
+    createInfo.imageType = VK_IMAGE_TYPE_2D;
+    createInfo.format = format;
+    createInfo.extent = extent3D;
+    createInfo.mipLevels = 1;
+    createInfo.arrayLayers = 1;
+    createInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+    createInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
+    createInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT;
+    createInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    createInfo.queueFamilyIndexCount = 0;
+    createInfo.pQueueFamilyIndices = NULL;
+    createInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+    vkCreateImage(
+        logicalDevice,
+        &createInfo,
+        NULL,
+        image);
+
+    allocateImageMemory(
+        logicalDevice,
+        physicalDevice,
+        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+        *image,
+        imageMemory);
+
+    VkImageSubresourceRange subresourceRange;
+    subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+    subresourceRange.baseMipLevel = 0;
+    subresourceRange.levelCount = 1;
+    subresourceRange.baseArrayLayer = 0;
+    subresourceRange.layerCount = 1;
+
+    VkImageViewCreateInfo viewCreateInfo;
+    viewCreateInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    viewCreateInfo.pNext = NULL;
+    viewCreateInfo.flags = 0;
+    viewCreateInfo.image = *image;
+    viewCreateInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    viewCreateInfo.format = format;
+    viewCreateInfo.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewCreateInfo.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewCreateInfo.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewCreateInfo.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+    viewCreateInfo.subresourceRange = subresourceRange;
+    handleVkResult(
+        vkCreateImageView(
+            logicalDevice,
+            &viewCreateInfo,
+            NULL,
+            imageView),
+        "creating light accumulate image view");
+
+    transitionImageLayout(
+        logicalDevice,
+        graphicsQueue,
+        transientCommandPool,
+        *image,
+        subresourceRange,
+        VK_IMAGE_LAYOUT_UNDEFINED,
+        VK_IMAGE_LAYOUT_GENERAL,
+        0,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        0,
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
+}
