@@ -9,76 +9,7 @@
 
 #include "./geometry_pass.h"
 
-#define AXIS_X 0
-#define AXIS_Y 1
-#define AXIS_Z 2
-
-#define FACE_XP_BIT 1
-#define FACE_YP_BIT 2
-#define FACE_ZP_BIT 4
-#define FACE_XN_BIT 8
-#define FACE_YN_BIT 16
-#define FACE_ZN_BIT 32
-
 const static VkFormat VOX_COLOR_IMAGE_FORMAT = VK_FORMAT_R8_UINT;
-
-const static vec3 cubePoints[] = {
-    { -0.1, -0.1, -0.1 },
-    { -0.1, -0.1, +1.1 },
-    { -0.1, +1.1, -0.1 },
-    { -0.1, +1.1, +1.1 },
-    { +1.1, -0.1, -0.1 },
-    { +1.1, -0.1, +1.1 },
-    { +1.1, +1.1, -0.1 },
-    { +1.1, +1.1, +1.1 }
-};
-
-void createHexahedronObjectVerts(
-    vec3* points,
-    ObjectVertex* verts)
-{
-    glm_vec3_copy(points[0], verts[0].pos);
-    glm_vec3_copy(points[2], verts[1].pos);
-    glm_vec3_copy(points[3], verts[2].pos);
-    glm_vec3_copy(points[0], verts[3].pos);
-    glm_vec3_copy(points[3], verts[4].pos);
-    glm_vec3_copy(points[1], verts[5].pos);
-
-    glm_vec3_copy(points[4], verts[6].pos);
-    glm_vec3_copy(points[7], verts[7].pos);
-    glm_vec3_copy(points[6], verts[8].pos);
-    glm_vec3_copy(points[4], verts[9].pos);
-    glm_vec3_copy(points[5], verts[10].pos);
-    glm_vec3_copy(points[7], verts[11].pos);
-
-    glm_vec3_copy(points[0], verts[12].pos);
-    glm_vec3_copy(points[6], verts[13].pos);
-    glm_vec3_copy(points[2], verts[14].pos);
-    glm_vec3_copy(points[0], verts[15].pos);
-    glm_vec3_copy(points[4], verts[16].pos);
-    glm_vec3_copy(points[6], verts[17].pos);
-
-    glm_vec3_copy(points[1], verts[18].pos);
-    glm_vec3_copy(points[3], verts[19].pos);
-    glm_vec3_copy(points[7], verts[20].pos);
-    glm_vec3_copy(points[1], verts[21].pos);
-    glm_vec3_copy(points[7], verts[22].pos);
-    glm_vec3_copy(points[5], verts[23].pos);
-
-    glm_vec3_copy(points[0], verts[24].pos);
-    glm_vec3_copy(points[1], verts[25].pos);
-    glm_vec3_copy(points[5], verts[26].pos);
-    glm_vec3_copy(points[0], verts[27].pos);
-    glm_vec3_copy(points[5], verts[28].pos);
-    glm_vec3_copy(points[4], verts[29].pos);
-
-    glm_vec3_copy(points[2], verts[30].pos);
-    glm_vec3_copy(points[7], verts[31].pos);
-    glm_vec3_copy(points[3], verts[32].pos);
-    glm_vec3_copy(points[2], verts[33].pos);
-    glm_vec3_copy(points[6], verts[34].pos);
-    glm_vec3_copy(points[7], verts[35].pos);
-}
 
 void createObjectDescriptorSetLayout(
     VkDevice logicalDevice,
@@ -101,7 +32,8 @@ void createObjectDescriptorSetLayout(
     colorBinding.pImmutableSamplers = NULL;
 
     VkDescriptorSetLayoutBinding bindings[] = {
-        uboBinding, colorBinding
+        uboBinding,
+        colorBinding,
     };
     VkDescriptorSetLayoutCreateInfo layoutCreateInfo;
     layoutCreateInfo.sType
@@ -172,7 +104,7 @@ void createVoxelColorImage(
     imageCreateInfo.arrayLayers = 1;
     imageCreateInfo.samples = VK_SAMPLE_COUNT_1_BIT;
     imageCreateInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-    imageCreateInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT 
+    imageCreateInfo.usage = VK_IMAGE_USAGE_STORAGE_BIT
         | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
     imageCreateInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
     imageCreateInfo.queueFamilyIndexCount = 0;
@@ -245,8 +177,6 @@ void ObjectStorage_init(
         OBJECT_CAPACITY * sizeof(vec3));
     storage->sizes = (ivec3*)malloc(
         OBJECT_CAPACITY * sizeof(ivec3));
-    storage->vertBufferOffsets = (uint32_t*)malloc(
-        OBJECT_CAPACITY * sizeof(uint32_t));
     storage->voxColorImages = (VkImage*)malloc(
         OBJECT_CAPACITY * sizeof(VkImage));
     storage->voxColorImageViews = (VkImageView*)malloc(
@@ -257,19 +187,6 @@ void ObjectStorage_init(
         OBJECT_CAPACITY * sizeof(VkDescriptorSet));
 
     /* GPU BUFFERS */
-
-    createBuffer(
-        logicalDevice,
-        physicalDevice,
-        OBJECT_CAPACITY
-            * MAX_OBJ_VERT_COUNT
-            * sizeof(ObjectVertex),
-        0,
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
-            | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &storage->vertBuffer,
-        &storage->vertBufferMemory);
 
     createBuffer(
         logicalDevice,
@@ -326,26 +243,6 @@ void ObjectStorage_addObjects(
         storage->sizes[obj][0] = sizes[i][0];
         storage->sizes[obj][1] = sizes[i][1];
         storage->sizes[obj][2] = sizes[i][2];
-
-        /* VERTS */
-        storage->vertBufferOffsets[obj]
-            = obj * MAX_OBJ_VERT_COUNT;
-        {
-            ObjectVertex* verts;
-            handleVkResult(
-                vkMapMemory(
-                    logicalDevice,
-                    storage->vertBufferMemory,
-                    storage->vertBufferOffsets[obj] * sizeof(ObjectVertex),
-                    MAX_OBJ_VERT_COUNT * sizeof(ObjectVertex),
-                    0,
-                    (void*)&verts),
-                "mapping object vertex memory");
-            createHexahedronObjectVerts(
-                (vec3*)cubePoints,
-                verts);
-            vkUnmapMemory(logicalDevice, storage->vertBufferMemory);
-        }
 
         /* IMAGE */
         createVoxelColorImage(
@@ -445,7 +342,7 @@ void ObjectStorage_updateVoxColors(
     ObjRef obj,
     uint8_t* colors)
 {
-    uint32_t memSize 
+    uint32_t memSize
         = storage->sizes[obj][0]
         * storage->sizes[obj][1]
         * storage->sizes[obj][2];
@@ -458,7 +355,7 @@ void ObjectStorage_updateVoxColors(
         memSize,
         0,
         (void*)&stagingBuffer);
-    
+
     memcpy(stagingBuffer, colors, memSize);
 
     vkUnmapMemory(logicalDevice, storage->voxImageStagingBufferMemory);
@@ -469,16 +366,14 @@ void ObjectStorage_updateVoxColors(
         graphicsQueue,
         storage->voxImageStagingBuffer,
         storage->voxColorImages[obj],
-        (VkExtent3D){
+        (VkExtent3D) {
             storage->sizes[obj][0],
             storage->sizes[obj][1],
-            storage->sizes[obj][2]});
+            storage->sizes[obj][2] });
 }
 
 void ObjectStorage_destroy(ObjectStorage* storage, VkDevice logicalDevice)
 {
-    vkDestroyBuffer(logicalDevice, storage->vertBuffer, NULL);
-    vkFreeMemory(logicalDevice, storage->vertBufferMemory, NULL);
     vkDestroyBuffer(logicalDevice, storage->uniformBuffer, NULL);
     vkFreeMemory(logicalDevice, storage->uniformBufferMemory, NULL);
     vkDestroyBuffer(logicalDevice, storage->voxImageStagingBuffer, NULL);
@@ -502,7 +397,6 @@ void ObjectStorage_destroy(ObjectStorage* storage, VkDevice logicalDevice)
 
     free(storage->positions);
     free(storage->sizes);
-    free(storage->vertBufferOffsets);
     free(storage->voxColorImages);
     free(storage->voxColorImageViews);
     free(storage->voxColorImagesMemory);

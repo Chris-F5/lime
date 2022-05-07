@@ -5,14 +5,6 @@
 
 #include "vk_utils.h"
 
-const static VkVertexInputBindingDescription OBJ_VERT_BINDINGS[] = {
-    { 0, sizeof(ObjectVertex), VK_VERTEX_INPUT_RATE_VERTEX }
-};
-
-const static VkVertexInputAttributeDescription OBJ_VERT_INPUT_ATTRIBS[] = {
-    { 0, 0, VK_FORMAT_R32G32B32_SFLOAT, offsetof(ObjectVertex, pos) },
-};
-
 void createGeometryRenderPass(
     VkDevice logicalDevice,
     VkFormat depthImageFormat,
@@ -154,12 +146,10 @@ void createObjectGeometryPipeline(
         = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
     vertexInputInfo.pNext = NULL;
     vertexInputInfo.flags = 0;
-    vertexInputInfo.vertexBindingDescriptionCount 
-        = sizeof(OBJ_VERT_BINDINGS) / sizeof(OBJ_VERT_BINDINGS[0]);
-    vertexInputInfo.pVertexBindingDescriptions = OBJ_VERT_BINDINGS;
-    vertexInputInfo.vertexAttributeDescriptionCount
-        = sizeof(OBJ_VERT_INPUT_ATTRIBS) / sizeof(OBJ_VERT_INPUT_ATTRIBS[0]);
-    vertexInputInfo.pVertexAttributeDescriptions = OBJ_VERT_INPUT_ATTRIBS;
+    vertexInputInfo.vertexBindingDescriptionCount = 0;
+    vertexInputInfo.pVertexBindingDescriptions = NULL;
+    vertexInputInfo.vertexAttributeDescriptionCount = 0;
+    vertexInputInfo.pVertexAttributeDescriptions = NULL;
 
     /* INPUT ASSEMBLY */
     VkPipelineInputAssemblyStateCreateInfo inputAssemblyInfo;
