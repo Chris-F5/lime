@@ -267,9 +267,26 @@ void main() {
     uint surfaceLightInt = getSurfaceLight(surfaceId);
     float surfaceLight = float(surfaceLightInt) / float(SURFACE_LIGHT_MAX);
 
-    float ambientFraction = 0.00;
+    uint monteCarloLightInt = int(monteCarloLight * 65535.0);
+    if(movedThisFrame == 0) {
+        uvec4 oldLightDat = imageLoad(lightAccumulateImage, ivec2(gl_FragCoord));
+        uint oldLightInt = oldLightDat.r;
+        uint staticTime = oldLightDat.g;
+        float newFraction = 1.0 / float(staticTime);
+
+        uint convergeLightInt = int(monteCarloLightInt * newFraction + oldLightInt * (1.0 - newFraction));
+        monteCarloLight = convergeLightInt / 65535.0;
+
+        uvec4 newLightDat = uvec4(convergeLightInt, staticTime + 1, 0, 0);
+        imageStore(lightAccumulateImage, ivec2(gl_FragCoord), newLightDat);
+    } else {
+        uvec4 newLightDat = uvec4(monteCarloLightInt, 1, 0, 0);
+        imageStore(lightAccumulateImage, ivec2(gl_FragCoord), newLightDat);
+    }
+
+    float ambientFraction = 0.05;
     float normalFraction  = 0.00;
-    float monteCarloFraction = 1.00;
+    float monteCarloFraction = 0.95;
     float surfaceFraction = 0.00;
     float normalLight = dot(normal, -lightDir);
     float light
@@ -277,26 +294,6 @@ void main() {
         + normalFraction * normalLight
         + monteCarloFraction * monteCarloLight
         + surfaceFraction * surfaceLight;
-
-    uint lightInt = int(light * 65535.0);
-
-    if(movedThisFrame == 0) {
-        uvec4 oldLightDat = imageLoad(lightAccumulateImage, ivec2(gl_FragCoord));
-        uint oldLightInt = oldLightDat.r;
-        uint staticTime = oldLightDat.g;
-        float newFraction = 1.0 / float(staticTime);
-
-        uint convergeLightInt = int(lightInt * newFraction + oldLightInt * (1.0 - newFraction));
-        float convergeLight = convergeLightInt / 65535.0;
-
-        uvec4 newLightDat = uvec4(convergeLightInt, staticTime + 1, 0, 0);
-        imageStore(lightAccumulateImage, ivec2(gl_FragCoord), newLightDat);
-
-        light = convergeLight;
-    } else {
-        uvec4 newLightDat = uvec4(lightInt, 1, 0, 0);
-        imageStore(lightAccumulateImage, ivec2(gl_FragCoord), newLightDat);
-    }
 
     outColor = vec4(worldPos / 200 * light, 1.0);
     //outColor = vec4(light, light, light, 1.0);
