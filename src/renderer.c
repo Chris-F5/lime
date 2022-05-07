@@ -10,7 +10,7 @@
 
 #include "./geometry_pass.h"
 #include "./lighting_pass.h"
-#include "./gbuffer.h"
+#include "./screen_images.h"
 
 #define SURFACE_LIGHT_BUFFER_SIZE 1000000 * 4
 #define OBJ_VERT_COUNT 36
