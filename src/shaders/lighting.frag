@@ -125,9 +125,6 @@ vec3 pickRayDir(vec3 normal) {
 bool traceRay(vec3 rayDir, vec3 worldPos)
 {
     ivec3 shadowVoxPosInt = ivec3(worldPos + rayDir / 2);
-    if(sampleShadowVolume(shadowVoxPosInt)) {
-        //return true;
-    }
     bool hit = false;
 
     /* RAY TRAVERSAL INIT */
@@ -237,8 +234,9 @@ float sampleSkyLight(vec3 rayDir) {
 }
 
 void main() {
+    // TODO: improve rng
     currentSeed
-        = int(gl_FragCoord.x + gl_FragCoord.y * 100 + time * 10000);
+        = uint(gl_FragCoord.x + gl_FragCoord.y * 100 + time * 10000);
     randomByte();
     currentGoldenRandom.x = randomByte() / 255.0;
     currentGoldenRandom.y = randomByte() / 255.0;
