@@ -252,6 +252,11 @@ void main() {
     vec3 worldPos = depthToWorld(inUV, depth);
     uint surfaceId = texture(samplerSurfaceId, inUV).r;
 
+    if (normal == vec3(0, 0, 0)) {
+        outColor = vec4(1.0, 0.0, 1.0, 1.0);
+        return;
+    }
+
     // TODO: world pos out of bounds of shadow volume
 
     float monteCarloLight = 0;

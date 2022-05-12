@@ -8,6 +8,11 @@ typedef struct {
     vec3 pos;
 } ObjectVertex;
 
+typedef struct {
+    vec3 pos;
+    uint8_t color;
+} VoxSplatVertex;
+
 void createGeometryRenderPass(
     VkDevice logicalDevice,
     VkFormat depthImageFormat,
@@ -16,6 +21,17 @@ void createGeometryRenderPass(
     VkRenderPass* renderPass);
 
 void createObjectGeometryPipeline(
+    VkDevice logicalDevice,
+    VkPipelineLayout layout,
+    VkRenderPass renderPass,
+    uint32_t subpassIndex,
+    VkExtent2D presentExtent,
+    VkShaderModule vertShaderModule,
+    VkShaderModule fragShaderModule,
+    uint32_t colorAttachmentCount,
+    VkPipeline* pipeline);
+
+void createVoxSplatGeometryPipeline(
     VkDevice logicalDevice,
     VkPipelineLayout layout,
     VkRenderPass renderPass,

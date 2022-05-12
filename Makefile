@@ -12,7 +12,9 @@ DEPENDS = $(patsubst ./src/%.c, obj/%.d,$(SRCS))
 REQUIREDSHADERS = target/obj.vert.spv \
 				  target/obj.frag.spv \
 				  target/lighting.vert.spv \
-				  target/lighting.frag.spv
+				  target/lighting.frag.spv \
+				  target/vox_splat.vert.spv \
+				  target/vox_splat.frag.spv
 
 LIGHTINGSHADERDEFINES = -DOUTPUT_POSITION=1
 
@@ -40,6 +42,12 @@ target/lighting.vert.spv: src/shaders/lighting.vert
 target/lighting.frag.spv: src/shaders/lighting.frag
 	mkdir -p $(dir $@)
 	glslc $< -o $@ -Isrc/shaders $(LIGHTINGSHADERDEFINES)
+target/vox_splat.vert.spv: src/shaders/vox_splat.vert
+	mkdir -p $(dir $@)
+	glslc $< -o $@ -Isrc/shaders
+target/vox_splat.frag.spv: src/shaders/vox_splat.frag
+	mkdir -p $(dir $@)
+	glslc $< -o $@ -Isrc/shaders
 
 run: all
 	cd target; ./$(OUTPUTNAME)
