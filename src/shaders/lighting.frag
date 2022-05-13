@@ -86,18 +86,19 @@ vec3 depthToWorld(vec2 uv, float depth) {
 
     vec4 worldSpacePosition = inverse(view) * viewSpacePosition;
 
-    return worldSpacePosition.xyz; }
+    return worldSpacePosition.xyz;
+}
 
-    bool sampleShadowVolume(ivec3 pos) {
-        ivec3 texel = pos / 2;
-        uint bitIndex
-            = (pos.x % 2)
-            + (pos.y % 2) * 2
-            + (pos.z % 2) * 4;
-        uvec4 texDat = imageLoad(shadowVolume, texel);
-        //return texDat.x > 0;
-        return (texDat.x & (1 << bitIndex)) > 0;
-    }
+bool sampleShadowVolume(ivec3 pos) {
+    ivec3 texel = pos / 2;
+    uint bitIndex
+        = (pos.x % 2)
+        + (pos.y % 2) * 2
+        + (pos.z % 2) * 4;
+    uvec4 texDat = imageLoad(shadowVolume, texel);
+    //return texDat.x > 0;
+    return (texDat.x & (1 << bitIndex)) > 0;
+}
 
 mat3 makeRotMatFromDir(vec3 dir) {
     vec3 right;
@@ -124,6 +125,13 @@ vec3 pickRayDir(vec3 normal) {
 
 bool traceRay(vec3 rayDir, vec3 worldPos)
 {
+    if(worldPos.x < 0
+        || worldPos.x >= shadowVolumeSize.x
+        || worldPos.y < 0
+        || worldPos.y >= shadowVolumeSize.y) {
+        return false;
+    }
+
     ivec3 shadowVoxPosInt = ivec3(worldPos + rayDir / 2);
     bool hit = false;
 
