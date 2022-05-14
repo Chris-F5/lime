@@ -800,7 +800,9 @@ void Renderer_init(
 
     /* VOX SPLAT GEOMETRY PIPELINE */
     {
-        VkDescriptorSetLayout setLayouts[] = {};
+        VkDescriptorSetLayout setLayouts[] = {
+            renderer->cameraDescriptorSetLayout,
+        };
         createPipelineLayout(
             device->logical,
             sizeof(setLayouts) / sizeof(setLayouts[0]),

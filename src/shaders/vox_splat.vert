@@ -22,7 +22,7 @@ out gl_PerVertex
 
 void main ()
 {
+    gl_Position = proj * view * vec4(pos, 1.0);
     gl_PointSize = 8.0;
     outColor = vec3(1.0, 0.0, 1.0);
-    gl_Position = vec4(0.5, 0.5, 0.5, 1.0);
 }
