@@ -17,6 +17,7 @@ layout(location = 2) out uint outSurfaceId;
 
 void main()
 {
+    gl_FragDepth = 0.999;
     outAlbedo = vec4(inColor, 1.0);
     outNormal = vec4(0.0, 1.0, 0.0, 1.0);
     outSurfaceId = 1;

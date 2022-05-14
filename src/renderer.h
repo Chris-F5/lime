@@ -17,6 +17,8 @@ typedef struct {
     float farClip;
     uint32_t time;
     uint32_t movedThisFrame;
+    uint32_t screenWidth;
+    uint32_t screenHeight;
 } CameraUniformData;
 
 typedef struct {

@@ -3,7 +3,7 @@
 #define CGLM_FORCE_DEPTH_ZERO_TO_ONE
 #include <cglm/cglm.h>
 
-const float moveSpeed = 2.0f;
+const float moveSpeed = 0.2f;
 const float rotSpeed = 4.0f;
 
 void Camera_forward(const Camera* camera, vec3 forward)

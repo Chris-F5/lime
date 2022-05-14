@@ -562,28 +562,20 @@ void Renderer_init(
         | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
         &renderer->voxSplatVertexBuffer,
         &renderer->voxSplatVertexBufferMemory);
-    renderer->voxSplatVertexCount = 3;
+    renderer->voxSplatVertexCount = 1;
     {
         VoxSplatVertex* verts;
         vkMapMemory(
             device->logical,
             renderer->voxSplatVertexBufferMemory,
             0,
-            3 * sizeof(VoxSplatVertex),
+            renderer->voxSplatVertexCount * sizeof(VoxSplatVertex),
             0,
             (void*)&verts);
         verts[0].color = 0;
         verts[0].pos[0] = 0;
         verts[0].pos[1] = 0;
         verts[0].pos[2] = 0;
-        verts[1].color = 1;
-        verts[1].pos[0] = -10;
-        verts[1].pos[1] = -10;
-        verts[1].pos[2] = -10;
-        verts[2].color = 2;
-        verts[2].pos[0] = 260;
-        verts[2].pos[1] = 0;
-        verts[2].pos[2] = 0;
         vkUnmapMemory(device->logical, renderer->voxSplatVertexBufferMemory);
     }
 
@@ -1090,6 +1082,8 @@ void Renderer_drawFrame(
     cameraData->farClip = farClip;
     cameraData->time = renderer->time;
     cameraData->movedThisFrame = 0;
+    cameraData->screenWidth = renderer->presentExtent.width;
+    cameraData->screenHeight = renderer->presentExtent.height;
     if(movedThisFrame)
         cameraData->movedThisFrame = 1;
 
