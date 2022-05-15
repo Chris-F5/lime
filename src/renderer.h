@@ -48,10 +48,10 @@ typedef struct {
     VkDeviceMemory normalImageMemory;
     VkImageView normalImageView;
 
-    VkFormat surfaceIdImageFormat;
-    VkImage surfaceIdImage;
-    VkDeviceMemory surfaceIdImageMemory;
-    VkImageView surfaceIdImageView;
+    VkFormat surfaceHashImageFormat;
+    VkImage surfaceHashImage;
+    VkDeviceMemory surfaceHashImageMemory;
+    VkImageView surfaceHashImageView;
     
     /* SAMPLERS */
     VkSampler gbufferSampler;
@@ -62,8 +62,8 @@ typedef struct {
     VkImageView lightAccumulateImageView;
 
     /* STORAGE BUFFERS */
-    VkBuffer surfaceLightBuffer;
-    VkDeviceMemory surfaceLightBufferMemory;
+    VkBuffer surfaceHashIrradianceCacheBuffer;
+    VkDeviceMemory surfaceHashIrradianceCacheBufferMemory;
 
     /* UNIFORM BUFFERS */
     VkBuffer cameraUniformBuffer;

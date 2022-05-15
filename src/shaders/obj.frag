@@ -23,7 +23,7 @@ layout(location = 1) in vec3 fragPos;
 
 layout(location = 0) out vec4 outAlbedo;
 layout(location = 1) out vec4 outNormal;
-layout(location = 2) out uint outSurfaceId;
+layout(location = 2) out uint outSurfaceHash;
 
 void writeDepth(float depth)
 {
@@ -40,8 +40,8 @@ void writeNormal(vec3 normal)
     outNormal = vec4(normal, 1.0);
 }
 
-void writeSurfaceId(uint id) {
-    outSurfaceId = id;
+void writeSurfaceHash(uint id) {
+    outSurfaceHash = id;
 }
 
 float camDistanceToDepth(float distanceFromCameraPlane)
@@ -53,7 +53,7 @@ float camDistanceToDepth(float distanceFromCameraPlane)
     return depth;
 }
 
-uint generateSurfaceId(ivec3 objPos) {
+uint generateSurfaceHash(ivec3 objPos) {
     uint id 
         = objPos.x 
         + objPos.y * MAX_OBJ_SCALE 
@@ -120,7 +120,7 @@ void main()
         writeDepth(0.0);
         writeAlbedo(vec3(1.0, 0.0, 1.0));
         writeNormal(-dir);
-        writeSurfaceId(generateSurfaceId(objPosInt));
+        writeSurfaceHash(generateSurfaceHash(objPosInt));
         return;
     }
 
@@ -244,7 +244,7 @@ void main()
         writeDepth(camDistanceToDepth(distanceFromCameraPlane));
         writeAlbedo(vec3(1.0, 0.0, 0.0));
         writeNormal(hitNormal);
-        writeSurfaceId(generateSurfaceId(objPosInt));
+        writeSurfaceHash(generateSurfaceHash(objPosInt));
     }
 }
 

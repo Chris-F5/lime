@@ -12,7 +12,17 @@
 #include "./lighting_pass.h"
 #include "./screen_images.h"
 
-#define SURFACE_LIGHT_BUFFER_SIZE 1000000 * 4
+/*
+ * surface hash irradiance cache element:
+ *   8 bit  heat
+ *   24 bit sample count
+ *   32 bit sample sum
+ *   32 bit scaled sample squared sum
+ * = 96 bits = 12 bytes
+ */
+#define SURFACE_HASH_IRRADIANCE_CACHE_ELEMENT_COUNT 1000000
+#define SURFACE_HASH_IRRADIANCE_CACHE_ELEMENT_SIZE 12
+
 #define OBJ_VERT_COUNT 36
 
 static void createGeometryFramebuffer(
@@ -129,7 +139,7 @@ void updateLightingPassDescriptorSetBindings(
     VkSampler sampler,
     uint32_t gbufferImagesCount,
     VkImageView* imageViews,
-    VkBuffer surfaceLightBuffer,
+    VkBuffer surfaceHashIrradianceCacheBuffer,
     VkImageView lightAccumulateImageView,
     VkDescriptorSet dstSet)
 {
@@ -155,10 +165,10 @@ void updateLightingPassDescriptorSetBindings(
     write.pTexelBufferView = NULL;
     vkUpdateDescriptorSets(logicalDevice, 1, &write, 0, NULL);
 
-    VkDescriptorBufferInfo surfaceLightBufferInfo;
-    surfaceLightBufferInfo.buffer = surfaceLightBuffer;
-    surfaceLightBufferInfo.offset = 0;
-    surfaceLightBufferInfo.range = VK_WHOLE_SIZE;
+    VkDescriptorBufferInfo surfaceHashBufferInfo;
+    surfaceHashBufferInfo.buffer = surfaceHashIrradianceCacheBuffer;
+    surfaceHashBufferInfo.offset = 0;
+    surfaceHashBufferInfo.range = VK_WHOLE_SIZE;
 
     write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     write.pNext = NULL;
@@ -168,7 +178,7 @@ void updateLightingPassDescriptorSetBindings(
     write.descriptorCount = 1;
     write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
     write.pImageInfo = NULL;
-    write.pBufferInfo = &surfaceLightBufferInfo;
+    write.pBufferInfo = &surfaceHashBufferInfo;
     write.pTexelBufferView = NULL;
     vkUpdateDescriptorSets(logicalDevice, 1, &write, 0, NULL);
 
@@ -454,26 +464,26 @@ void Renderer_init(
         &renderer->normalImageMemory,
         &renderer->normalImageView);
 
-    renderer->surfaceIdImageFormat = VK_FORMAT_R32_UINT;
+    renderer->surfaceHashImageFormat = VK_FORMAT_R32_UINT;
     createColorAttachmentImage(
         device->logical,
         device->physical,
-        renderer->surfaceIdImageFormat,
+        renderer->surfaceHashImageFormat,
         renderer->presentExtent,
-        &renderer->surfaceIdImage,
-        &renderer->surfaceIdImageMemory,
-        &renderer->surfaceIdImageView);
+        &renderer->surfaceHashImage,
+        &renderer->surfaceHashImageMemory,
+        &renderer->surfaceHashImageView);
 
     VkImageView gbufferImageViews[] = {
         renderer->depthImageView,
         renderer->albedoImageView,
         renderer->normalImageView,
-        renderer->surfaceIdImageView,
+        renderer->surfaceHashImageView,
     };
     VkFormat gbufferColorImageFormats[] = {
         renderer->albedoImageFormat,
         renderer->normalImageFormat,
-        renderer->surfaceIdImageFormat,
+        renderer->surfaceHashImageFormat,
     };
     uint32_t gbufferAttachmentCount
         = sizeof(gbufferImageViews) / sizeof(gbufferImageViews[0]);
@@ -510,16 +520,17 @@ void Renderer_init(
             "creating gbuffer sampler");
     }
 
-    /* SURFACE LIGHT BUFFER */
+    /* SURFACE HASH IRRADIANCE CACHE BUFFER */
     createBuffer(
         device->logical,
         device->physical,
-        SURFACE_LIGHT_BUFFER_SIZE,
+        SURFACE_HASH_IRRADIANCE_CACHE_ELEMENT_COUNT
+        * SURFACE_HASH_IRRADIANCE_CACHE_ELEMENT_SIZE,
         0,
         VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
         VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        &renderer->surfaceLightBuffer,
-        &renderer->surfaceLightBufferMemory);
+        &renderer->surfaceHashIrradianceCacheBuffer,
+        &renderer->surfaceHashIrradianceCacheBufferMemory);
 
     /* STORAGE IMAGES */
     createLightAccumulateImage(
@@ -673,7 +684,7 @@ void Renderer_init(
         renderer->gbufferSampler,
         sizeof(gbufferImageViews) / sizeof(gbufferImageViews[0]),
         gbufferImageViews,
-        renderer->surfaceLightBuffer,
+        renderer->surfaceHashIrradianceCacheBuffer,
         renderer->lightAccumulateImageView,
         renderer->lightingPassDescriptorSet);
 
@@ -1062,9 +1073,9 @@ void Renderer_destroy(
     vkFreeMemory(logicalDevice, renderer->normalImageMemory, NULL);
     vkDestroyImageView(logicalDevice, renderer->normalImageView, NULL);
 
-    vkDestroyImage(logicalDevice, renderer->surfaceIdImage, NULL);
-    vkFreeMemory(logicalDevice, renderer->surfaceIdImageMemory, NULL);
-    vkDestroyImageView(logicalDevice, renderer->surfaceIdImageView, NULL);
+    vkDestroyImage(logicalDevice, renderer->surfaceHashImage, NULL);
+    vkFreeMemory(logicalDevice, renderer->surfaceHashImageMemory, NULL);
+    vkDestroyImageView(logicalDevice, renderer->surfaceHashImageView, NULL);
 
     vkDestroySampler(logicalDevice, renderer->gbufferSampler, NULL);
 
@@ -1073,8 +1084,14 @@ void Renderer_destroy(
     vkDestroyImageView(logicalDevice, renderer->lightAccumulateImageView, NULL);
 
     /* STORAGE BUFFERS */
-    vkDestroyBuffer(logicalDevice, renderer->surfaceLightBuffer, NULL);
-    vkFreeMemory(logicalDevice, renderer->surfaceLightBufferMemory, NULL);
+    vkDestroyBuffer(
+        logicalDevice,
+        renderer->surfaceHashIrradianceCacheBuffer,
+        NULL);
+    vkFreeMemory(
+        logicalDevice,
+        renderer->surfaceHashIrradianceCacheBufferMemory,
+        NULL);
 
     /* UNIFORM BUFFERS */
     vkDestroyBuffer(logicalDevice, renderer->cameraUniformBuffer, NULL);

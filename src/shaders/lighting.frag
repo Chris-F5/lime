@@ -12,9 +12,9 @@ layout(set = 0, binding = 0) uniform GlobalUniformBuffer {
 layout(set = 1, binding = 0) uniform sampler2D samplerDepth;
 layout(set = 1, binding = 1) uniform sampler2D samplerAlbedo;
 layout(set = 1, binding = 2) uniform sampler2D samplerNormal;
-layout(set = 1, binding = 3) uniform usampler2D samplerSurfaceId;
-layout(set = 1, binding = 4) buffer SurfaceLightBuffer {
-    uint surfaceLightBuffer[];
+layout(set = 1, binding = 3) uniform usampler2D samplerSurfaceHash;
+layout(set = 1, binding = 4) buffer SurfaceHashIrradianceCacheBuffer {
+    uint surfaceHashIrradianceCacheBuffer[];
 };
 layout(set = 1, binding = 5, rg16ui) uniform uimage2D lightAccumulateImage;
 
@@ -27,8 +27,6 @@ layout(set = 2, binding = 1, r8ui) uniform uimage3D shadowVolume;
 layout (location = 0) in vec2 inUV;
 
 layout (location = 0) out vec4 outColor;
-
-#define SURFACE_LIGHT_MAX 8388607
 
 vec3 lightDir = normalize(vec3(0, -1, 1));
 uint samples = 4;
@@ -72,10 +70,6 @@ vec3 cosinWeightedHemisphere()
     float x = radial * cos(theta);
     float z = radial * sin(theta);
     return vec3(x, sqrt(1 - randPoint.x), z);
-}
-
-uint getSurfaceLight(uint surfaceId) {
-    return surfaceLightBuffer[surfaceId];
 }
 
 vec3 depthToWorld(vec2 uv, float depth) {
@@ -258,7 +252,7 @@ void main() {
     vec3 albedo = texture(samplerAlbedo, inUV).rgb;
     vec3 normal = texture(samplerNormal, inUV).rgb;
     vec3 worldPos = depthToWorld(inUV, depth);
-    uint surfaceId = texture(samplerSurfaceId, inUV).r;
+    uint surfaceHash = texture(samplerSurfaceHash, inUV).r;
 
     // TODO: world pos out of bounds of shadow volume
 
@@ -270,9 +264,6 @@ void main() {
         }
     }
     monteCarloLight /= samples;
-
-    uint surfaceLightInt = getSurfaceLight(surfaceId);
-    float surfaceLight = float(surfaceLightInt) / float(SURFACE_LIGHT_MAX);
 
     uint monteCarloLightInt = int(monteCarloLight * 65535.0);
     if(movedThisFrame == 0) {
@@ -294,13 +285,11 @@ void main() {
     float ambientFraction = 0.05;
     float normalFraction  = 0.00;
     float monteCarloFraction = 0.95;
-    float surfaceFraction = 0.00;
     float normalLight = dot(normal, -lightDir);
     float light
         = ambientFraction
         + normalFraction * normalLight
-        + monteCarloFraction * monteCarloLight
-        + surfaceFraction * surfaceLight;
+        + monteCarloFraction * monteCarloLight;
 
     //outColor = vec4(worldPos / 200 * light, 1.0);
     outColor = vec4(light, light, light, 1.0);
