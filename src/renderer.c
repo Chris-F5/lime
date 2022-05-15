@@ -197,16 +197,12 @@ static void recordRenderCommandBuffers(
     VkRenderPass lightingRenderPass,
     VkPipelineLayout objGeometryPipelineLayout,
     VkPipeline objGeometryPipeline,
-    VkPipelineLayout voxSplatPipelineLayout,
-    VkPipeline voxSplatPipeline,
     VkPipelineLayout lightingPipelineLayout,
     VkPipeline lightingPipeline,
     VkDescriptorSet* cameraDescriptorSets,
     VkDescriptorSet lightingPassDescriptorSet,
     VkDescriptorSet shadowVolumeDescriptorSet,
     ObjectStorage* objStorage,
-    uint32_t voxSplatVertexCount,
-    VkBuffer voxSplatVertexBuffer,
     uint32_t swapLen,
     VkFramebuffer geometryFramebuffer,
     VkFramebuffer* swapImageFramebuffers,
@@ -247,7 +243,6 @@ static void recordRenderCommandBuffers(
                 &renderPassInfo,
                 VK_SUBPASS_CONTENTS_INLINE);
 
-            /* OBJ GEOMETRY PIPELINE */
             vkCmdBindPipeline(
                 commandBuffers[s],
                 VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -280,31 +275,6 @@ static void recordRenderCommandBuffers(
                     0,
                     0);
             }
-            vkCmdNextSubpass(
-                commandBuffers[s],
-                VK_SUBPASS_CONTENTS_INLINE);
-            
-            /* VOX SPLAT PIPELINE */
-            vkCmdBindPipeline(
-                commandBuffers[s],
-                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                voxSplatPipeline);
-
-            VkDeviceSize voxSplatVertexBufferOffsets[] = { 0 };
-            vkCmdBindVertexBuffers(
-                commandBuffers[s],
-                0,
-                1,
-                &voxSplatVertexBuffer,
-                voxSplatVertexBufferOffsets);
-
-            vkCmdDraw(
-                commandBuffers[s],
-                voxSplatVertexCount,
-                1,
-                0,
-                0);
-
             vkCmdEndRenderPass(commandBuffers[s]);
         }
 
@@ -551,34 +521,6 @@ void Renderer_init(
         &renderer->surfaceLightBuffer,
         &renderer->surfaceLightBufferMemory);
 
-    /* VOXEL SPLAT VERTEX BUFFER */
-    createBuffer(
-        device->logical,
-        device->physical,
-        3 * sizeof(VoxSplatVertex),
-        0,
-        VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT
-        | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT,
-        &renderer->voxSplatVertexBuffer,
-        &renderer->voxSplatVertexBufferMemory);
-    renderer->voxSplatVertexCount = 1;
-    {
-        VoxSplatVertex* verts;
-        vkMapMemory(
-            device->logical,
-            renderer->voxSplatVertexBufferMemory,
-            0,
-            renderer->voxSplatVertexCount * sizeof(VoxSplatVertex),
-            0,
-            (void*)&verts);
-        verts[0].color = 0;
-        verts[0].pos[0] = 0;
-        verts[0].pos[1] = 0;
-        verts[0].pos[2] = 0;
-        vkUnmapMemory(device->logical, renderer->voxSplatVertexBufferMemory);
-    }
-
     /* STORAGE IMAGES */
     createLightAccumulateImage(
         device->logical,
@@ -747,7 +689,7 @@ void Renderer_init(
         renderer->swapImageFormat,
         &renderer->lightingRenderPass);
 
-    /* OBJECT GEOMETRY PIPELINE */
+    /* OBJECT GEOMETRY PIPELINE LAYOUT */
     {
         VkDescriptorSetLayout setLayouts[] = {
             renderer->cameraDescriptorSetLayout,
@@ -760,7 +702,10 @@ void Renderer_init(
             0,
             NULL,
             &renderer->objGeometryPipelineLayout);
+    }
 
+    /* OBJECT GEOMETRY PIPELINE */
+    {
         VkShaderModule objVertShaderModule, objFragShaderModule;
         createShaderModule(
             device->logical,
@@ -787,48 +732,6 @@ void Renderer_init(
         vkDestroyShaderModule(
             device->logical,
             objFragShaderModule,
-            NULL);
-    }
-
-    /* VOX SPLAT GEOMETRY PIPELINE */
-    {
-        VkDescriptorSetLayout setLayouts[] = {
-            renderer->cameraDescriptorSetLayout,
-        };
-        createPipelineLayout(
-            device->logical,
-            sizeof(setLayouts) / sizeof(setLayouts[0]),
-            setLayouts,
-            0,
-            NULL,
-            &renderer->voxSplatPipelineLayout);
-
-        VkShaderModule vertShaderModule, fragShaderModule;
-        createShaderModule(
-            device->logical,
-            "vox_splat.vert.spv",
-            &vertShaderModule);
-        createShaderModule(
-            device->logical,
-            "vox_splat.frag.spv",
-            &fragShaderModule);
-        createVoxSplatGeometryPipeline(
-            device->logical,
-            renderer->voxSplatPipelineLayout,
-            renderer->geometryRenderPass,
-            1,
-            renderer->presentExtent,
-            vertShaderModule,
-            fragShaderModule,
-            gbufferColorAttachmentCount,
-            &renderer->voxSplatPipeline);
-        vkDestroyShaderModule(
-            device->logical,
-            vertShaderModule,
-            NULL);
-        vkDestroyShaderModule(
-            device->logical,
-            fragShaderModule,
             NULL);
     }
 
@@ -924,16 +827,12 @@ void Renderer_init(
         renderer->lightingRenderPass,
         renderer->objGeometryPipelineLayout,
         renderer->objGeometryPipeline,
-        renderer->voxSplatPipelineLayout,
-        renderer->voxSplatPipeline,
         renderer->lightingPipelineLayout,
         renderer->lightingPipeline,
         renderer->cameraDescriptorSets,
         renderer->lightingPassDescriptorSet,
         renderer->shadowVolume.descriptorSet,
         &renderer->objStorage,
-        renderer->voxSplatVertexCount,
-        renderer->voxSplatVertexBuffer,
         renderer->swapLen,
         renderer->geometryFramebuffer,
         renderer->swapImageFramebuffers,
@@ -999,16 +898,12 @@ void Renderer_recreateCommandBuffers(
         renderer->lightingRenderPass,
         renderer->objGeometryPipelineLayout,
         renderer->objGeometryPipeline,
-        renderer->voxSplatPipelineLayout,
-        renderer->voxSplatPipeline,
         renderer->lightingPipelineLayout,
         renderer->lightingPipeline,
         renderer->cameraDescriptorSets,
         renderer->lightingPassDescriptorSet,
         renderer->shadowVolume.descriptorSet,
         &renderer->objStorage,
-        renderer->voxSplatVertexCount,
-        renderer->voxSplatVertexBuffer,
         renderer->swapLen,
         renderer->geometryFramebuffer,
         renderer->swapImageFramebuffers,
@@ -1082,8 +977,6 @@ void Renderer_drawFrame(
     cameraData->farClip = farClip;
     cameraData->time = renderer->time;
     cameraData->movedThisFrame = 0;
-    cameraData->screenWidth = renderer->presentExtent.width;
-    cameraData->screenHeight = renderer->presentExtent.height;
     if(movedThisFrame)
         cameraData->movedThisFrame = 1;
 
@@ -1179,15 +1072,13 @@ void Renderer_destroy(
     vkFreeMemory(logicalDevice, renderer->lightAccumulateImageMemory, NULL);
     vkDestroyImageView(logicalDevice, renderer->lightAccumulateImageView, NULL);
 
-    /* BUFFERS */
+    /* STORAGE BUFFERS */
     vkDestroyBuffer(logicalDevice, renderer->surfaceLightBuffer, NULL);
     vkFreeMemory(logicalDevice, renderer->surfaceLightBufferMemory, NULL);
 
+    /* UNIFORM BUFFERS */
     vkDestroyBuffer(logicalDevice, renderer->cameraUniformBuffer, NULL);
     vkFreeMemory(logicalDevice, renderer->cameraUniformBufferMemory, NULL);
-
-    vkDestroyBuffer(logicalDevice, renderer->voxSplatVertexBuffer, NULL);
-    vkFreeMemory(logicalDevice, renderer->voxSplatVertexBufferMemory, NULL);
 
     /* DESCRIPTOR SETS */
     vkDestroyDescriptorPool(
@@ -1210,11 +1101,6 @@ void Renderer_destroy(
         renderer->objGeometryPipelineLayout,
         NULL);
     vkDestroyPipeline(logicalDevice, renderer->objGeometryPipeline, NULL);
-    vkDestroyPipelineLayout(
-        logicalDevice,
-        renderer->voxSplatPipelineLayout,
-        NULL);
-    vkDestroyPipeline(logicalDevice, renderer->voxSplatPipeline, NULL);
     vkDestroyPipelineLayout(
         logicalDevice,
         renderer->lightingPipelineLayout,

@@ -5,8 +5,6 @@ layout(set = 0, binding = 0) uniform GlobalUniformBuffer {
     mat4 proj;
     float nearClip;
     float farClip;
-    uint time;
-    uint movedThisFrame;
 };
 
 layout(set = 1, binding = 0) uniform ObjectUniformBuffer {

@@ -106,12 +106,11 @@ int main()
                 y / noiseScale,
                 z / noiseScale);
             if (noiseValue < 0.03) {
-                voxels[i] = 0;//1;
+                voxels[i] = 1;
             } else {
                 voxels[i] = 0;
             }
         }
-        voxels[0] = 1;
 
         ShadowVolume_splatVoxObject(
             &renderer.shadowVolume,
@@ -172,9 +171,9 @@ int main()
         / (float)renderer.presentExtent.height;
     Camera camera;
     Camera_init(&camera, aspectRatio);
-    camera.pos[0] = 0;
-    camera.pos[1] = 0;
-    camera.pos[2] = 0;
+    camera.pos[0] = 40;
+    camera.pos[1] = 260;
+    camera.pos[2] = 40;
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();

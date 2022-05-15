@@ -17,8 +17,6 @@ typedef struct {
     float farClip;
     uint32_t time;
     uint32_t movedThisFrame;
-    uint32_t screenWidth;
-    uint32_t screenHeight;
 } CameraUniformData;
 
 typedef struct {
@@ -67,10 +65,6 @@ typedef struct {
     VkBuffer surfaceLightBuffer;
     VkDeviceMemory surfaceLightBufferMemory;
 
-    uint32_t voxSplatVertexCount;
-    VkBuffer voxSplatVertexBuffer;
-    VkDeviceMemory voxSplatVertexBufferMemory;
-
     /* UNIFORM BUFFERS */
     VkBuffer cameraUniformBuffer;
     VkDeviceMemory cameraUniformBufferMemory;
@@ -87,9 +81,6 @@ typedef struct {
     /* PIPELINES */
     VkPipelineLayout objGeometryPipelineLayout;
     VkPipeline objGeometryPipeline;
-
-    VkPipelineLayout voxSplatPipelineLayout;
-    VkPipeline voxSplatPipeline;
 
     VkPipelineLayout lightingPipelineLayout;
     VkPipeline lightingPipeline;
