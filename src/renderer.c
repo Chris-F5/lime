@@ -88,40 +88,27 @@ static void createSwapImageFramebuffers(
     }
 }
 
-void createLightingPassDescriptorSetLayout(
+void createGbufferDescriptorSetLayout(
     VkDevice logicalDevice,
-    uint32_t gbufferImagesCount,
+    uint32_t imageCount,
     VkDescriptorSetLayout* descriptorSetLayout)
 {
-    uint32_t bindingsCount = gbufferImagesCount + 2;
     VkDescriptorSetLayoutBinding* bindings = (VkDescriptorSetLayoutBinding*)
-        malloc(bindingsCount * sizeof(VkDescriptorSetLayoutBinding));
-    uint32_t i;
-    for (i = 0; i < gbufferImagesCount; i++) {
+        malloc(imageCount * sizeof(VkDescriptorSetLayoutBinding));
+    for (uint32_t i = 0; i < imageCount; i++) {
         bindings[i].binding = i;
         bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
         bindings[i].descriptorCount = 1;
         bindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
         bindings[i].pImmutableSamplers = NULL;
     }
-    bindings[i].binding = i;
-    bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    bindings[i].descriptorCount = 1;
-    bindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    bindings[i].pImmutableSamplers = NULL;
-    i++;
-    bindings[i].binding = i;
-    bindings[i].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    bindings[i].descriptorCount = 1;
-    bindings[i].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
-    bindings[i].pImmutableSamplers = NULL;
 
     VkDescriptorSetLayoutCreateInfo layoutCreateInfo;
     layoutCreateInfo.sType
         = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
     layoutCreateInfo.pNext = NULL;
     layoutCreateInfo.flags = 0;
-    layoutCreateInfo.bindingCount = bindingsCount;
+    layoutCreateInfo.bindingCount = imageCount;
     layoutCreateInfo.pBindings = bindings;
 
     handleVkResult(
@@ -130,74 +117,39 @@ void createLightingPassDescriptorSetLayout(
             &layoutCreateInfo,
             NULL,
             descriptorSetLayout),
-        "creating lighting pass descriptor set layout");
+        "creating gbuffer descriptor set layout");
     free(bindings);
 }
 
-void updateLightingPassDescriptorSetBindings(
+void updateGbufferDescriptorSetBindings(
     VkDevice logicalDevice,
     VkSampler sampler,
-    uint32_t gbufferImagesCount,
+    uint32_t imageCount,
     VkImageView* imageViews,
-    VkBuffer surfaceHashIrradianceCacheBuffer,
-    VkImageView lightAccumulateImageView,
     VkDescriptorSet dstSet)
 {
     VkDescriptorImageInfo* imageInfos = (VkDescriptorImageInfo*)malloc(
-        gbufferImagesCount * sizeof(VkDescriptorImageInfo));
-    for (uint32_t i = 0; i < gbufferImagesCount; i++) {
+        imageCount * sizeof(VkDescriptorImageInfo));
+    for (uint32_t i = 0; i < imageCount; i++) {
         imageInfos[i].sampler = sampler;
         imageInfos[i].imageView = imageViews[i];
         imageInfos[i].imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
     }
 
     VkWriteDescriptorSet write;
-
     write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
     write.pNext = NULL;
     write.dstSet = dstSet;
     write.dstBinding = 0;
     write.dstArrayElement = 0;
-    write.descriptorCount = gbufferImagesCount;
+    write.descriptorCount = imageCount;
     write.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
     write.pImageInfo = imageInfos;
     write.pBufferInfo = NULL;
     write.pTexelBufferView = NULL;
     vkUpdateDescriptorSets(logicalDevice, 1, &write, 0, NULL);
 
-    VkDescriptorBufferInfo surfaceHashBufferInfo;
-    surfaceHashBufferInfo.buffer = surfaceHashIrradianceCacheBuffer;
-    surfaceHashBufferInfo.offset = 0;
-    surfaceHashBufferInfo.range = VK_WHOLE_SIZE;
-
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.pNext = NULL;
-    write.dstSet = dstSet;
-    write.dstBinding = gbufferImagesCount;
-    write.dstArrayElement = 0;
-    write.descriptorCount = 1;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-    write.pImageInfo = NULL;
-    write.pBufferInfo = &surfaceHashBufferInfo;
-    write.pTexelBufferView = NULL;
-    vkUpdateDescriptorSets(logicalDevice, 1, &write, 0, NULL);
-
-    VkDescriptorImageInfo lightAccumulateImageInfo;
-    lightAccumulateImageInfo.sampler = NULL;
-    lightAccumulateImageInfo.imageView = lightAccumulateImageView;
-    lightAccumulateImageInfo.imageLayout = VK_IMAGE_LAYOUT_GENERAL;
-
-    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-    write.pNext = NULL;
-    write.dstSet = dstSet;
-    write.dstBinding = gbufferImagesCount + 1;
-    write.dstArrayElement = 0;
-    write.descriptorCount = 1;
-    write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-    write.pImageInfo = &lightAccumulateImageInfo;
-    write.pBufferInfo = NULL;
-    write.pTexelBufferView = NULL;
-    vkUpdateDescriptorSets(logicalDevice, 1, &write, 0, NULL);
+    free(imageInfos);
 }
 
 static void recordRenderCommandBuffers(
@@ -210,8 +162,9 @@ static void recordRenderCommandBuffers(
     VkPipelineLayout lightingPipelineLayout,
     VkPipeline lightingPipeline,
     VkDescriptorSet* cameraDescriptorSets,
-    VkDescriptorSet lightingPassDescriptorSet,
+    VkDescriptorSet gbufferDescriptorSet,
     VkDescriptorSet shadowVolumeDescriptorSet,
+    VkDescriptorSet surfaceHashIrradianceCacheDescriptorSet,
     ObjectStorage* objStorage,
     uint32_t swapLen,
     VkFramebuffer geometryFramebuffer,
@@ -338,8 +291,9 @@ static void recordRenderCommandBuffers(
 
             VkDescriptorSet descriptorSets[] = {
                 cameraDescriptorSets[s],
-                lightingPassDescriptorSet,
+                gbufferDescriptorSet,
                 shadowVolumeDescriptorSet,
+                surfaceHashIrradianceCacheDescriptorSet,
             };
 
             vkCmdBindDescriptorSets(
@@ -567,7 +521,7 @@ void Renderer_init(
 
         VkDescriptorPoolSize storageImagePoolSize;
         storageImagePoolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
-        storageImagePoolSize.descriptorCount = 2;
+        storageImagePoolSize.descriptorCount = 1;
 
         VkDescriptorPoolSize storageBufferSize;
         storageBufferSize.type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
@@ -584,7 +538,7 @@ void Renderer_init(
         poolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolCreateInfo.pNext = NULL;
         poolCreateInfo.flags = 0;
-        poolCreateInfo.maxSets = renderer->swapLen + 2;
+        poolCreateInfo.maxSets = renderer->swapLen + 3;
         poolCreateInfo.poolSizeCount = sizeof(poolSizes) / sizeof(poolSizes[0]);
         poolCreateInfo.pPoolSizes = poolSizes;
 
@@ -667,26 +621,79 @@ void Renderer_init(
         vkUpdateDescriptorSets(device->logical, 1, &write, 0, NULL);
     }
 
-    /* LIGHTING PASS DESCRIPTOR SET */
-    createLightingPassDescriptorSetLayout(
+    /* GBUFFER DESCRIPTOR SET */
+    createGbufferDescriptorSetLayout(
         device->logical,
         sizeof(gbufferImageViews) / sizeof(gbufferImageViews[0]),
-        &renderer->lightingPassDescriptorSetLayout);
+        &renderer->gbufferDescriptorSetLayout);
 
     allocateDescriptorSets(
         device->logical,
-        renderer->lightingPassDescriptorSetLayout,
+        renderer->gbufferDescriptorSetLayout,
         renderer->descriptorPool,
         1,
-        &renderer->lightingPassDescriptorSet);
-    updateLightingPassDescriptorSetBindings(
+        &renderer->gbufferDescriptorSet);
+    updateGbufferDescriptorSetBindings(
         device->logical,
         renderer->gbufferSampler,
         sizeof(gbufferImageViews) / sizeof(gbufferImageViews[0]),
         gbufferImageViews,
-        renderer->surfaceHashIrradianceCacheBuffer,
-        renderer->lightAccumulateImageView,
-        renderer->lightingPassDescriptorSet);
+        renderer->gbufferDescriptorSet);
+
+    /* SURFACE HASH IRRADIANCE CACHE DESCRIPTOR SET */
+    {
+        VkDescriptorSetLayoutBinding storageBufferBinding;
+        storageBufferBinding.binding = 0;
+        storageBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        storageBufferBinding.descriptorCount = 1;
+        storageBufferBinding.stageFlags
+            = VK_SHADER_STAGE_VERTEX_BIT
+            | VK_SHADER_STAGE_FRAGMENT_BIT;
+        storageBufferBinding.pImmutableSamplers = NULL;
+
+        VkDescriptorSetLayoutCreateInfo layoutCreateInfo;
+        layoutCreateInfo.sType
+            = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutCreateInfo.pNext = NULL;
+        layoutCreateInfo.flags = 0;
+        layoutCreateInfo.bindingCount = 1;
+        layoutCreateInfo.pBindings = &storageBufferBinding;
+
+        handleVkResult(
+            vkCreateDescriptorSetLayout(
+                device->logical,
+                &layoutCreateInfo,
+                NULL,
+                &renderer->surfaceHashIrradianceCacheDescriptorSetLayout),
+            "creating surface hash irradiance cache descriptor set layout");
+    }
+    allocateDescriptorSets(
+        device->logical,
+        renderer->surfaceHashIrradianceCacheDescriptorSetLayout,
+        renderer->descriptorPool,
+        1,
+        &renderer->surfaceHashIrradianceCacheDescriptorSet);
+    {
+        VkDescriptorBufferInfo storageBufferInfo;
+        storageBufferInfo.buffer = renderer->surfaceHashIrradianceCacheBuffer;
+        storageBufferInfo.offset = 0;
+        storageBufferInfo.range 
+            = SURFACE_HASH_IRRADIANCE_CACHE_ELEMENT_COUNT
+            * SURFACE_HASH_IRRADIANCE_CACHE_ELEMENT_SIZE;
+
+        VkWriteDescriptorSet write;
+        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        write.pNext = NULL;
+        write.dstSet = renderer->surfaceHashIrradianceCacheDescriptorSet;
+        write.dstBinding = 0;
+        write.dstArrayElement = 0;
+        write.descriptorCount = 1;
+        write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+        write.pImageInfo = NULL;
+        write.pBufferInfo = &storageBufferInfo;
+        write.pTexelBufferView = NULL;
+        vkUpdateDescriptorSets(device->logical, 1, &write, 0, NULL);
+    }
 
     /* RENDER PASSES */
     createGeometryRenderPass(
@@ -750,8 +757,9 @@ void Renderer_init(
     {
         VkDescriptorSetLayout setLayouts[] = {
             renderer->cameraDescriptorSetLayout,
-            renderer->lightingPassDescriptorSetLayout,
+            renderer->gbufferDescriptorSetLayout,
             renderer->shadowVolume.descriptorSetLayout,
+            renderer->surfaceHashIrradianceCacheDescriptorSetLayout,
         };
 
         createPipelineLayout(
@@ -841,8 +849,9 @@ void Renderer_init(
         renderer->lightingPipelineLayout,
         renderer->lightingPipeline,
         renderer->cameraDescriptorSets,
-        renderer->lightingPassDescriptorSet,
+        renderer->gbufferDescriptorSet,
         renderer->shadowVolume.descriptorSet,
+        renderer->surfaceHashIrradianceCacheDescriptorSet,
         &renderer->objStorage,
         renderer->swapLen,
         renderer->geometryFramebuffer,
@@ -912,8 +921,9 @@ void Renderer_recreateCommandBuffers(
         renderer->lightingPipelineLayout,
         renderer->lightingPipeline,
         renderer->cameraDescriptorSets,
-        renderer->lightingPassDescriptorSet,
+        renderer->gbufferDescriptorSet,
         renderer->shadowVolume.descriptorSet,
+        renderer->surfaceHashIrradianceCacheDescriptorSet,
         &renderer->objStorage,
         renderer->swapLen,
         renderer->geometryFramebuffer,
@@ -1109,7 +1119,11 @@ void Renderer_destroy(
     free(renderer->cameraDescriptorSets);
     vkDestroyDescriptorSetLayout(
         logicalDevice,
-        renderer->lightingPassDescriptorSetLayout,
+        renderer->gbufferDescriptorSetLayout,
+        NULL);
+    vkDestroyDescriptorSetLayout(
+        logicalDevice,
+        renderer->surfaceHashIrradianceCacheDescriptorSetLayout,
         NULL);
 
     /* PIPELINES AND RENDER PASSES */

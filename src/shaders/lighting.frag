@@ -13,16 +13,16 @@ layout(set = 1, binding = 0) uniform sampler2D samplerDepth;
 layout(set = 1, binding = 1) uniform sampler2D samplerAlbedo;
 layout(set = 1, binding = 2) uniform sampler2D samplerNormal;
 layout(set = 1, binding = 3) uniform usampler2D samplerSurfaceHash;
-layout(set = 1, binding = 4) buffer SurfaceHashIrradianceCacheBuffer {
-    uint surfaceHashIrradianceCacheBuffer[];
-};
-layout(set = 1, binding = 5, rg16ui) uniform uimage2D lightAccumulateImage;
 
 layout(set = 2, binding = 0) uniform ShadowVolumeUniformBuffer {
     ivec3 shadowVolumeSize;
 };
 
 layout(set = 2, binding = 1, r8ui) uniform uimage3D shadowVolume;
+
+layout(set = 3, binding = 0) buffer SurfaceHashIrradianceCacheBuffer {
+    uint surfaceHashIrradianceCacheBuffer[];
+};
 
 layout (location = 0) in vec2 inUV;
 
@@ -264,23 +264,6 @@ void main() {
         }
     }
     monteCarloLight /= samples;
-
-    uint monteCarloLightInt = int(monteCarloLight * 65535.0);
-    if(movedThisFrame == 0) {
-        uvec4 oldLightDat = imageLoad(lightAccumulateImage, ivec2(gl_FragCoord));
-        uint oldLightInt = oldLightDat.r;
-        uint staticTime = oldLightDat.g;
-        float newFraction = 1.0 / float(staticTime);
-
-        uint convergeLightInt = int(monteCarloLightInt * newFraction + oldLightInt * (1.0 - newFraction));
-        monteCarloLight = convergeLightInt / 65535.0;
-
-        uvec4 newLightDat = uvec4(convergeLightInt, staticTime + 1, 0, 0);
-        imageStore(lightAccumulateImage, ivec2(gl_FragCoord), newLightDat);
-    } else {
-        uvec4 newLightDat = uvec4(monteCarloLightInt, 1, 0, 0);
-        imageStore(lightAccumulateImage, ivec2(gl_FragCoord), newLightDat);
-    }
 
     float ambientFraction = 0.05;
     float normalFraction  = 0.00;

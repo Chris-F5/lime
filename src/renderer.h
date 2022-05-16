@@ -75,8 +75,11 @@ typedef struct {
     VkDescriptorSetLayout cameraDescriptorSetLayout;
     VkDescriptorSet* cameraDescriptorSets;
 
-    VkDescriptorSetLayout lightingPassDescriptorSetLayout;
-    VkDescriptorSet lightingPassDescriptorSet;
+    VkDescriptorSetLayout gbufferDescriptorSetLayout;
+    VkDescriptorSet gbufferDescriptorSet;
+
+    VkDescriptorSetLayout surfaceHashIrradianceCacheDescriptorSetLayout;
+    VkDescriptorSet surfaceHashIrradianceCacheDescriptorSet;
 
     /* PIPELINES */
     VkPipelineLayout objGeometryPipelineLayout;
