@@ -152,169 +152,149 @@ void updateGbufferDescriptorSetBindings(
     free(imageInfos);
 }
 
-static void recordRenderCommandBuffers(
+static void recordRenderCommandBuffer(
     VkDevice logicalDevice,
     VkExtent2D presentExtent,
     VkRenderPass geometryRenderPass,
     VkRenderPass lightingRenderPass,
-    VkPipelineLayout objGeometryPipelineLayout,
-    VkPipeline objGeometryPipeline,
-    VkPipelineLayout lightingPipelineLayout,
-    VkPipeline lightingPipeline,
-    VkDescriptorSet* cameraDescriptorSets,
-    VkDescriptorSet gbufferDescriptorSet,
-    VkDescriptorSet shadowVolumeDescriptorSet,
-    VkDescriptorSet surfaceHashIrradianceCacheDescriptorSet,
-    ObjectStorage* objStorage,
-    uint32_t swapLen,
     VkFramebuffer geometryFramebuffer,
-    VkFramebuffer* swapImageFramebuffers,
-    VkCommandBuffer* commandBuffers)
+    VkFramebuffer lightingFramebuffer,
+    uint32_t geometryPassClearValueCount,
+    VkClearValue* geometryPassClearValues,
+    uint32_t lightingPassClearValueCount,
+    VkClearValue* lightingPassClearValues,
+    VkPipeline objGeometryPipeline,
+    VkPipeline lightingPipeline,
+    VkPipelineLayout objGeometryPipelineLayout,
+    VkPipelineLayout lightingPipelineLayout,
+    uint32_t objGeometryDescriptorSetCount,
+    VkDescriptorSet* objGeometryDescriptorSets,
+    uint32_t lightingDescriptorSetCount,
+    VkDescriptorSet* lightingDescriptorSets,
+    uint32_t voxObjCount,
+    VkDescriptorSet* voxObjDescriptorSets,
+    VkCommandBuffer commandBuffer)
 {
-    for (int s = 0; s < swapLen; s++)
-        vkResetCommandBuffer(commandBuffers[s], 0);
-    for (int s = 0; s < swapLen; s++) {
-        /* BEGIN COMMAND BUFFER */
-        VkCommandBufferBeginInfo beginInfo;
-        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-        beginInfo.pNext = NULL;
-        beginInfo.flags = 0;
-        beginInfo.pInheritanceInfo = NULL;
-        handleVkResult(
-            vkBeginCommandBuffer(commandBuffers[s], &beginInfo),
-            "begin recording render command buffers");
+    /* BEGIN COMMAND BUFFER */
+    VkCommandBufferBeginInfo beginInfo;
+    beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    beginInfo.pNext = NULL;
+    beginInfo.flags = 0;
+    beginInfo.pInheritanceInfo = NULL;
+    handleVkResult(
+        vkBeginCommandBuffer(commandBuffer, &beginInfo),
+        "begin recording render command buffers");
 
-        /* GEOMETRY PASS */
-        {
-            VkClearValue clearValues[1];
-            memset(clearValues, 0, sizeof(clearValues));
-            clearValues[0].depthStencil.depth = 1.0f;
+    /* GEOMETRY PASS */
+    {
+        VkRenderPassBeginInfo geometryPassInfo;
+        geometryPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        geometryPassInfo.pNext = NULL;
+        geometryPassInfo.renderPass = geometryRenderPass;
+        geometryPassInfo.framebuffer = geometryFramebuffer;
+        geometryPassInfo.renderArea.offset = (VkOffset2D) { 0, 0 };
+        geometryPassInfo.renderArea.extent = presentExtent;
+        geometryPassInfo.clearValueCount = geometryPassClearValueCount;
+        geometryPassInfo.pClearValues = geometryPassClearValues;
 
-            VkRenderPassBeginInfo renderPassInfo;
-            renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            renderPassInfo.pNext = NULL;
-            renderPassInfo.renderPass = geometryRenderPass;
-            renderPassInfo.framebuffer = geometryFramebuffer;
-            renderPassInfo.renderArea.offset = (VkOffset2D) { 0, 0 };
-            renderPassInfo.renderArea.extent = presentExtent;
-            renderPassInfo.clearValueCount
-                = sizeof(clearValues) / sizeof(clearValues[0]);
-            renderPassInfo.pClearValues = clearValues;
+        vkCmdBeginRenderPass(
+            commandBuffer,
+            &geometryPassInfo,
+            VK_SUBPASS_CONTENTS_INLINE);
+    }
 
-            vkCmdBeginRenderPass(
-                commandBuffers[s],
-                &renderPassInfo,
-                VK_SUBPASS_CONTENTS_INLINE);
+    vkCmdBindPipeline(
+        commandBuffer,
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        objGeometryPipeline);
 
-            vkCmdBindPipeline(
-                commandBuffers[s],
-                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                objGeometryPipeline);
+    vkCmdBindDescriptorSets(
+        commandBuffer,
+        VK_PIPELINE_BIND_POINT_GRAPHICS,
+        objGeometryPipelineLayout,
+        0,
+        objGeometryDescriptorSetCount,
+        objGeometryDescriptorSets,
+        0,
+        NULL);
 
-            vkCmdBindDescriptorSets(
-                commandBuffers[s],
-                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                objGeometryPipelineLayout,
-                0,
-                1,
-                &cameraDescriptorSets[s],
-                0,
-                NULL);
-
-            for (int o = 0; o < objStorage->filled; o++) {
-                vkCmdBindDescriptorSets(
-                    commandBuffers[s],
-                    VK_PIPELINE_BIND_POINT_GRAPHICS,
-                    objGeometryPipelineLayout,
-                    1,
-                    1,
-                    &objStorage->descriptorSets[o],
-                    0,
-                    NULL);
-                vkCmdDraw(
-                    commandBuffers[s],
-                    OBJ_VERT_COUNT,
-                    1,
-                    0,
-                    0);
-            }
-            vkCmdEndRenderPass(commandBuffers[s]);
-        }
-
-        /* GRAPHICS -> LIGHTING : MEMORY BARRIERS */
-        VkMemoryBarrier memoryBarrier;
-        memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-        memoryBarrier.pNext = NULL;
-        memoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-        memoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-        vkCmdPipelineBarrier(
-            commandBuffers[s],
-            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-            0,
+    for (int o = 0; o < voxObjCount; o++) {
+        vkCmdBindDescriptorSets(
+            commandBuffer,
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            objGeometryPipelineLayout,
+            objGeometryDescriptorSetCount,
             1,
-            &memoryBarrier,
+            &voxObjDescriptorSets[o],
             0,
-            NULL,
+            NULL);
+        vkCmdDraw(
+            commandBuffer,
+            OBJ_VERT_COUNT,
+            1,
+            0,
+            0);
+    }
+    vkCmdEndRenderPass(commandBuffer);
+
+    /* GRAPHICS -> LIGHTING : MEMORY BARRIERS */
+    VkMemoryBarrier memoryBarrier;
+    memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+    memoryBarrier.pNext = NULL;
+    memoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    memoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(
+        commandBuffer,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        0,
+        1,
+        &memoryBarrier,
+        0,
+        NULL,
+        0,
+        NULL);
+
+    /* LIGHTING PASS */
+    {
+        VkRenderPassBeginInfo renderPassInfo;
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassInfo.pNext = NULL;
+        renderPassInfo.renderPass = lightingRenderPass;
+        renderPassInfo.framebuffer = lightingFramebuffer;
+        renderPassInfo.renderArea.offset = (VkOffset2D) { 0, 0 };
+        renderPassInfo.renderArea.extent = presentExtent;
+        renderPassInfo.clearValueCount = lightingPassClearValueCount;
+        renderPassInfo.pClearValues = lightingPassClearValues;
+
+        vkCmdBeginRenderPass(
+            commandBuffer,
+            &renderPassInfo,
+            VK_SUBPASS_CONTENTS_INLINE);
+
+        vkCmdBindPipeline(
+            commandBuffer,
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            lightingPipeline);
+
+        vkCmdBindDescriptorSets(
+            commandBuffer,
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            lightingPipelineLayout,
+            0,
+            lightingDescriptorSetCount,
+            lightingDescriptorSets,
             0,
             NULL);
 
-        /* LIGHTING PASS */
-        {
-            VkClearValue clearValues[1];
-            memset(clearValues, 0, sizeof(clearValues));
-            clearValues[0].color.float32[0] = 128.0f / 255.0;
-            clearValues[0].color.float32[1] = 218.0f / 255.0;
-            clearValues[0].color.float32[2] = 251.0f / 255.0;
-            clearValues[0].color.float32[3] = 1.0f;
-
-            VkRenderPassBeginInfo renderPassInfo;
-            renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
-            renderPassInfo.pNext = NULL;
-            renderPassInfo.renderPass = lightingRenderPass;
-            renderPassInfo.framebuffer = swapImageFramebuffers[s];
-            renderPassInfo.renderArea.offset = (VkOffset2D) { 0, 0 };
-            renderPassInfo.renderArea.extent = presentExtent;
-            renderPassInfo.clearValueCount
-                = sizeof(clearValues) / sizeof(clearValues[0]);
-            renderPassInfo.pClearValues = clearValues;
-
-            vkCmdBeginRenderPass(
-                commandBuffers[s],
-                &renderPassInfo,
-                VK_SUBPASS_CONTENTS_INLINE);
-
-            vkCmdBindPipeline(
-                commandBuffers[s],
-                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                lightingPipeline);
-
-            VkDescriptorSet descriptorSets[] = {
-                cameraDescriptorSets[s],
-                gbufferDescriptorSet,
-                shadowVolumeDescriptorSet,
-                surfaceHashIrradianceCacheDescriptorSet,
-            };
-
-            vkCmdBindDescriptorSets(
-                commandBuffers[s],
-                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                lightingPipelineLayout,
-                0,
-                sizeof(descriptorSets) / sizeof(descriptorSets[0]),
-                descriptorSets,
-                0,
-                NULL);
-
-            vkCmdDraw(commandBuffers[s], 3, 1, 0, 0);
-            vkCmdEndRenderPass(commandBuffers[s]);
-        }
-
-        /* END COMAND BUFFER */
-        handleVkResult(
-            vkEndCommandBuffer(commandBuffers[s]),
-            "recording render command buffer");
+        vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+        vkCmdEndRenderPass(commandBuffer);
     }
+
+    /* END COMAND BUFFER */
+    handleVkResult(
+        vkEndCommandBuffer(commandBuffer),
+        "recording render command buffer");
 }
 
 void Renderer_init(
@@ -839,25 +819,6 @@ void Renderer_init(
             "allocating render command buffers");
     }
 
-    recordRenderCommandBuffers(
-        device->logical,
-        renderer->presentExtent,
-        renderer->geometryRenderPass,
-        renderer->lightingRenderPass,
-        renderer->objGeometryPipelineLayout,
-        renderer->objGeometryPipeline,
-        renderer->lightingPipelineLayout,
-        renderer->lightingPipeline,
-        renderer->cameraDescriptorSets,
-        renderer->gbufferDescriptorSet,
-        renderer->shadowVolume.descriptorSet,
-        renderer->surfaceHashIrradianceCacheDescriptorSet,
-        &renderer->objStorage,
-        renderer->swapLen,
-        renderer->geometryFramebuffer,
-        renderer->swapImageFramebuffers,
-        renderer->commandBuffers);
-
     /* SYNCHRONIZATION */
     {
         VkSemaphoreCreateInfo semaphoreCreateInfo;
@@ -911,24 +872,58 @@ void Renderer_recreateCommandBuffers(
     VkDevice logicalDevice)
 {
     vkDeviceWaitIdle(logicalDevice);
-    recordRenderCommandBuffers(
-        logicalDevice,
-        renderer->presentExtent,
-        renderer->geometryRenderPass,
-        renderer->lightingRenderPass,
-        renderer->objGeometryPipelineLayout,
-        renderer->objGeometryPipeline,
-        renderer->lightingPipelineLayout,
-        renderer->lightingPipeline,
-        renderer->cameraDescriptorSets,
-        renderer->gbufferDescriptorSet,
-        renderer->shadowVolume.descriptorSet,
-        renderer->surfaceHashIrradianceCacheDescriptorSet,
-        &renderer->objStorage,
-        renderer->swapLen,
-        renderer->geometryFramebuffer,
-        renderer->swapImageFramebuffers,
-        renderer->commandBuffers);
+    for(uint32_t i = 0; i < renderer->swapLen; i++)
+        vkResetCommandBuffer(renderer->commandBuffers[i], 0);
+
+    VkClearValue geometryClearValues[1];
+    memset(geometryClearValues, 0, sizeof(geometryClearValues));
+    geometryClearValues[0].depthStencil.depth = 1.0f;
+
+    VkClearValue lightingClearValues[1];
+    memset(lightingClearValues, 0, sizeof(lightingClearValues));
+    lightingClearValues[0].color.float32[0] = 128.0f / 255.0;
+    lightingClearValues[0].color.float32[1] = 218.0f / 255.0;
+    lightingClearValues[0].color.float32[2] = 251.0f / 255.0;
+    lightingClearValues[0].color.float32[3] = 1.0f;
+
+    uint32_t objVoxCount = renderer->objStorage.filled;
+    VkDescriptorSet* objVoxDescriptorSets = renderer->objStorage.descriptorSets;
+
+    for(uint32_t i = 0; i < renderer->swapLen; i++) {
+        VkDescriptorSet objGeometryDescriptorSets[] = {
+            renderer->cameraDescriptorSets[i],
+        };
+        VkDescriptorSet lightingDescriptorSets[] = {
+            renderer->cameraDescriptorSets[i],
+            renderer->gbufferDescriptorSet,
+            renderer->shadowVolume.descriptorSet,
+            renderer->surfaceHashIrradianceCacheDescriptorSet,
+        };
+
+        recordRenderCommandBuffer(
+            logicalDevice,
+            renderer->presentExtent,
+            renderer->geometryRenderPass,
+            renderer->lightingRenderPass,
+            renderer->geometryFramebuffer,
+            renderer->swapImageFramebuffers[i],
+            sizeof(geometryClearValues) / sizeof(geometryClearValues[0]),
+            geometryClearValues,
+            sizeof(lightingClearValues) / sizeof(lightingClearValues[0]),
+            lightingClearValues,
+            renderer->objGeometryPipeline,
+            renderer->lightingPipeline,
+            renderer->objGeometryPipelineLayout,
+            renderer->lightingPipelineLayout,
+            sizeof(objGeometryDescriptorSets) 
+            / sizeof(objGeometryDescriptorSets[0]),
+            objGeometryDescriptorSets,
+            sizeof(lightingDescriptorSets) / sizeof(lightingDescriptorSets[0]),
+            lightingDescriptorSets,
+            objVoxCount,
+            objVoxDescriptorSets,
+            renderer->commandBuffers[i]);
+    }
 }
 
 void Renderer_drawFrame(
