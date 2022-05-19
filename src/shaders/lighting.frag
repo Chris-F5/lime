@@ -262,7 +262,8 @@ void main() {
         return;
     }
 
-    vec3 albedo = texture(samplerAlbedo, inUV).rgb;
+    vec4 albedo = texture(samplerAlbedo, inUV);
+    float irradiance = albedo.w;
     vec3 normal = texture(samplerNormal, inUV).rgb;
     vec3 worldPos = depthToWorld(inUV, depth);
     uint surfaceHash = texture(samplerSurfaceHash, inUV).r;
@@ -278,13 +279,16 @@ void main() {
     }
     recordSampleToSurface(surfaceHash, monteCarloLight);
 
-    float ambientFraction = 0.05;
-    float normalFraction  = 0.00;
-    float monteCarloFraction = 0.95;
+    float ambientFraction    = 0.05;
+    float normalFraction     = 0.00;
+    float irradianceFraction = 0.95;
+    float monteCarloFraction = 0.00;
+
     float normalLight = dot(normal, -lightDir);
     float light
         = ambientFraction
         + normalFraction * normalLight
+        + irradianceFraction * irradiance
         + monteCarloFraction * monteCarloLight;
 
     //outColor = vec4(worldPos / 200 * light, 1.0);

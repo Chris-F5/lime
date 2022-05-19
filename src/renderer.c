@@ -691,6 +691,7 @@ void Renderer_init(
     {
         VkDescriptorSetLayout setLayouts[] = {
             renderer->cameraDescriptorSetLayout,
+            renderer->surfaceHashIrradianceCacheDescriptorSetLayout,
             renderer->objStorage.descriptorSetLayout,
         };
         createPipelineLayout(
@@ -892,6 +893,7 @@ void Renderer_recreateCommandBuffers(
     for(uint32_t i = 0; i < renderer->swapLen; i++) {
         VkDescriptorSet objGeometryDescriptorSets[] = {
             renderer->cameraDescriptorSets[i],
+            renderer->surfaceHashIrradianceCacheDescriptorSet,
         };
         VkDescriptorSet lightingDescriptorSets[] = {
             renderer->cameraDescriptorSets[i],
