@@ -29,7 +29,20 @@ layout (location = 0) in vec2 inUV;
 layout (location = 0) out vec4 outColor;
 
 vec3 lightDir = normalize(vec3(0, -1, 1));
-uint samples = 4;
+
+void recordSampleToSurface(uint surfaceHash, float lightSample)
+{
+    atomicAdd(
+        surfaceHashIrradianceCacheBuffer[surfaceHash * 3],
+        1);
+    uint sampleInt = uint(lightSample * 255);
+    atomicAdd(
+        surfaceHashIrradianceCacheBuffer[surfaceHash * 3 + 1],
+        sampleInt);
+    atomicAdd(
+        surfaceHashIrradianceCacheBuffer[surfaceHash * 3 + 2],
+        (sampleInt * sampleInt) / 255);
+}
 
 uint currentSeed;
 uint randomByte()
@@ -257,13 +270,13 @@ void main() {
     // TODO: world pos out of bounds of shadow volume
 
     float monteCarloLight = 0;
-    for (int i = 0; i < samples; i++) {
-        vec3 rayDir = pickRayDir(normal);
-        if(!traceRay(rayDir, worldPos)) {
-            monteCarloLight += sampleSkyLight(rayDir);
-        }
+    vec3 rayDir = pickRayDir(normal);
+    if(traceRay(rayDir, worldPos)) {
+        // TODO: second bounce?
+    } else {
+        monteCarloLight = sampleSkyLight(rayDir);
     }
-    monteCarloLight /= samples;
+    recordSampleToSurface(surfaceHash, monteCarloLight);
 
     float ambientFraction = 0.05;
     float normalFraction  = 0.00;
