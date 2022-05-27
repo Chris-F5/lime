@@ -72,7 +72,7 @@ uint generateSurfaceHash(ivec3 objPos) {
 vec3 calcVoxelNormal(ivec3 voxPos)
 {
     vec3 normal = vec3(0, 0, 0);
-    int radius = 3;
+    int radius = 4;
     
     for (int x = -radius + 1; x < radius; x++)
     {
@@ -87,6 +87,10 @@ vec3 calcVoxelNormal(ivec3 voxPos)
                 }
             }
         }
+    }
+
+    if(normal.x == 0 && normal.y == 0 && normal.z == 0) {
+        return vec3(0.0, 1.0, 0.0);
     }
 
     return -normalize(normal);

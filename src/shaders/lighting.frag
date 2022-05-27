@@ -114,14 +114,16 @@ vec3 pickRayDir(vec3 normal) {
 
 bool traceRay(vec3 rayDir, vec3 worldPos)
 {
-    if(worldPos.x < 0
-        || worldPos.x >= shadowVolumeSize.x
-        || worldPos.y < 0
-        || worldPos.y >= shadowVolumeSize.y) {
+    ivec3 shadowVoxPosInt = ivec3(worldPos + rayDir / 2);
+    if(shadowVoxPosInt.x < 0
+        || shadowVoxPosInt.x >= shadowVolumeSize.x
+        || shadowVoxPosInt.y < 0
+        || shadowVoxPosInt.y >= shadowVolumeSize.y
+        || shadowVoxPosInt.z < 0
+        || shadowVoxPosInt.z >= shadowVolumeSize.z) {
         return false;
     }
 
-    ivec3 shadowVoxPosInt = ivec3(worldPos + rayDir / 2);
     bool hit = false;
 
     /* RAY TRAVERSAL INIT */
@@ -221,6 +223,11 @@ bool traceRay(vec3 rayDir, vec3 worldPos)
             hit = true;
             break;
         }
+
+        if(t > 100) {
+            hit = false;
+            break;
+        }
     }
     return hit;
 }
@@ -252,12 +259,16 @@ void main() {
     // TODO: world pos out of bounds of shadow volume
 
     float monteCarloLight = 0;
-    vec3 rayDir = pickRayDir(normal);
-    if(traceRay(rayDir, worldPos)) {
-        // TODO: second bounce?
-    } else {
-        monteCarloLight = sampleSkyLight(rayDir);
+    uint samples = 2;
+    for(uint i = 0; i < samples; i++) {
+        vec3 rayDir = normalize(pickRayDir(normal));
+        if(traceRay(rayDir, worldPos)) {
+            // TODO: second bounce?
+        } else {
+            monteCarloLight += sampleSkyLight(rayDir);
+        }
     }
+    monteCarloLight /= samples;
 
     float ambientFraction    = 0.05;
     float normalFraction     = 0.00;

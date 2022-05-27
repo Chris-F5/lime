@@ -100,12 +100,14 @@ int main()
             uint32_t x = i % objSize[0];
             uint32_t y = i / objSize[0] % objSize[1];
             uint32_t z = i / objSize[0] / objSize[1];
-            double noiseValue = open_simplex_noise3(
-                noiseCtx,
-                x / noiseScale,
-                y / noiseScale,
-                z / noiseScale);
-            if (noiseValue < 0.03) {
+            double noiseValue = (
+                open_simplex_noise3(
+                    noiseCtx,
+                    x / noiseScale,
+                    y / noiseScale,
+                    z / noiseScale) + 1
+                ) / 2.0;
+            if (noiseValue < 0.9 * ((float)(objSize[1] - y - 1) / (float)objSize[1])) {
                 voxels[i] = 1;
             } else {
                 voxels[i] = 0;
