@@ -7,7 +7,7 @@ layout(set = 0, binding = 0) uniform GlobalUniformBuffer {
     float farClip;
 };
 
-layout(set = 2, binding = 0) uniform ObjectUniformBuffer {
+layout(set = 1, binding = 0) uniform ObjectUniformBuffer {
     mat4 model;
 };
 

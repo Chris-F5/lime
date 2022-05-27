@@ -20,26 +20,11 @@ layout(set = 2, binding = 0) uniform ShadowVolumeUniformBuffer {
 
 layout(set = 2, binding = 1, r8ui) uniform uimage3D shadowVolume;
 
-layout(set = 3, binding = 0) buffer SurfaceHashIrradianceCacheBuffer {
-    uint surfaceHashIrradianceCacheBuffer[];
-};
-
 layout (location = 0) in vec2 inUV;
 
 layout (location = 0) out vec4 outColor;
 
 vec3 lightDir = normalize(vec3(0, -1, 1));
-
-void recordSampleToSurface(uint surfaceHash, float lightSample)
-{
-    atomicAdd(
-        surfaceHashIrradianceCacheBuffer[surfaceHash * 3],
-        1);
-    uint sampleInt = uint(lightSample * 255);
-    atomicAdd(
-        surfaceHashIrradianceCacheBuffer[surfaceHash * 3 + 1],
-        sampleInt);
-}
 
 uint currentSeed;
 uint randomByte()
@@ -260,7 +245,6 @@ void main() {
     }
 
     vec4 albedo = texture(samplerAlbedo, inUV);
-    float irradiance = albedo.w;
     vec3 normal = texture(samplerNormal, inUV).rgb;
     vec3 worldPos = depthToWorld(inUV, depth);
     uint surfaceHash = texture(samplerSurfaceHash, inUV).r;
@@ -274,22 +258,19 @@ void main() {
     } else {
         monteCarloLight = sampleSkyLight(rayDir);
     }
-    recordSampleToSurface(surfaceHash, monteCarloLight);
 
     float ambientFraction    = 0.05;
     float normalFraction     = 0.00;
-    float irradianceFraction = 0.95;
-    float monteCarloFraction = 0.00;
+    float monteCarloFraction = 0.95;
 
     float normalLight = dot(normal, -lightDir);
     float light
         = ambientFraction
         + normalFraction * normalLight
-        + irradianceFraction * irradiance
         + monteCarloFraction * monteCarloLight;
 
     //outColor = vec4(worldPos / 200 * light, 1.0);
-    outColor = vec4(light, light, light, 1.0);
+    //outColor = vec4(light, light, light, 1.0);
     //outColor = vec4(normal, 1.0);
-    //outColor = albedo;
+    outColor = albedo * light;
 }

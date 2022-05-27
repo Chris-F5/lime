@@ -12,20 +12,6 @@
 #include "./lighting_pass.h"
 #include "./screen_images.h"
 
-/*
- * surface hash irradiance cache element:
- *   8 bit  heat
- *   24 bit sample count
- *   32 bit sample sum
- *   32 bit scaled sample squared sum
- * = 96 bits = 12 bytes
- */
-// TODO: check irradiance preserve dispatch is in device specified range
-#define IRRADIANCE_PRESERVE_DISPATCH_X_SIZE 100
-#define IRRADIANCE_PRESERVE_DISPATCH_Y_SIZE 100
-#define IRRADIANCE_PRESERVE_DISPATCH_Z_SIZE 100
-#define SURFACE_HASH_IRRADIANCE_CACHE_ELEMENT_COUNT 1000000
-#define SURFACE_HASH_IRRADIANCE_CACHE_ELEMENT_SIZE 12
 
 #define OBJ_VERT_COUNT 36
 
@@ -169,16 +155,12 @@ static void recordRenderCommandBuffer(
     VkClearValue* lightingPassClearValues,
     VkPipeline objGeometryPipeline,
     VkPipeline lightingPipeline,
-    VkPipeline irradianceCachePreservePipeline,
     VkPipelineLayout objGeometryPipelineLayout,
     VkPipelineLayout lightingPipelineLayout,
-    VkPipelineLayout irradianceCachePreservePipelineLayout,
     uint32_t objGeometryDescriptorSetCount,
     VkDescriptorSet* objGeometryDescriptorSets,
     uint32_t lightingDescriptorSetCount,
     VkDescriptorSet* lightingDescriptorSets,
-    uint32_t irradianceCachePreserveDescriptorSetCount,
-    VkDescriptorSet* irradianceCachePreserveDescriptorSets,
     uint32_t voxObjCount,
     VkDescriptorSet* voxObjDescriptorSets,
     VkCommandBuffer commandBuffer)
@@ -296,29 +278,8 @@ static void recordRenderCommandBuffer(
             NULL);
 
         vkCmdDraw(commandBuffer, 3, 1, 0, 0);
-        vkCmdEndRenderPass(commandBuffer);
     }
-
-    /* IRRADIANCE CHACE PRESERVE */
-    vkCmdBindPipeline(
-        commandBuffer,
-        VK_PIPELINE_BIND_POINT_COMPUTE,
-        irradianceCachePreservePipeline);
-    vkCmdBindDescriptorSets(
-        commandBuffer,
-        VK_PIPELINE_BIND_POINT_COMPUTE,
-        irradianceCachePreservePipelineLayout,
-        0,
-        irradianceCachePreserveDescriptorSetCount,
-        irradianceCachePreserveDescriptorSets,
-        0,
-        NULL);
-        
-    vkCmdDispatch(
-        commandBuffer,
-        IRRADIANCE_PRESERVE_DISPATCH_X_SIZE,
-        IRRADIANCE_PRESERVE_DISPATCH_Y_SIZE,
-        IRRADIANCE_PRESERVE_DISPATCH_Z_SIZE);
+    vkCmdEndRenderPass(commandBuffer);
 
     /* END COMAND BUFFER */
     handleVkResult(
@@ -483,18 +444,6 @@ void Renderer_init(
             "creating gbuffer sampler");
     }
 
-    /* SURFACE HASH IRRADIANCE CACHE BUFFER */
-    createBuffer(
-        device->logical,
-        device->physical,
-        SURFACE_HASH_IRRADIANCE_CACHE_ELEMENT_COUNT
-        * SURFACE_HASH_IRRADIANCE_CACHE_ELEMENT_SIZE,
-        0,
-        VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
-        VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
-        &renderer->surfaceHashIrradianceCacheBuffer,
-        &renderer->surfaceHashIrradianceCacheBufferMemory);
-
     /* STORAGE IMAGES */
     createLightAccumulateImage(
         device->logical,
@@ -649,61 +598,6 @@ void Renderer_init(
         gbufferImageViews,
         renderer->gbufferDescriptorSet);
 
-    /* SURFACE HASH IRRADIANCE CACHE DESCRIPTOR SET */
-    {
-        VkDescriptorSetLayoutBinding storageBufferBinding;
-        storageBufferBinding.binding = 0;
-        storageBufferBinding.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        storageBufferBinding.descriptorCount = 1;
-        storageBufferBinding.stageFlags
-            = VK_SHADER_STAGE_VERTEX_BIT
-            | VK_SHADER_STAGE_FRAGMENT_BIT;
-        storageBufferBinding.pImmutableSamplers = NULL;
-
-        VkDescriptorSetLayoutCreateInfo layoutCreateInfo;
-        layoutCreateInfo.sType
-            = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutCreateInfo.pNext = NULL;
-        layoutCreateInfo.flags = 0;
-        layoutCreateInfo.bindingCount = 1;
-        layoutCreateInfo.pBindings = &storageBufferBinding;
-
-        handleVkResult(
-            vkCreateDescriptorSetLayout(
-                device->logical,
-                &layoutCreateInfo,
-                NULL,
-                &renderer->surfaceHashIrradianceCacheDescriptorSetLayout),
-            "creating surface hash irradiance cache descriptor set layout");
-    }
-    allocateDescriptorSets(
-        device->logical,
-        renderer->surfaceHashIrradianceCacheDescriptorSetLayout,
-        renderer->descriptorPool,
-        1,
-        &renderer->surfaceHashIrradianceCacheDescriptorSet);
-    {
-        VkDescriptorBufferInfo storageBufferInfo;
-        storageBufferInfo.buffer = renderer->surfaceHashIrradianceCacheBuffer;
-        storageBufferInfo.offset = 0;
-        storageBufferInfo.range 
-            = SURFACE_HASH_IRRADIANCE_CACHE_ELEMENT_COUNT
-            * SURFACE_HASH_IRRADIANCE_CACHE_ELEMENT_SIZE;
-
-        VkWriteDescriptorSet write;
-        write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        write.pNext = NULL;
-        write.dstSet = renderer->surfaceHashIrradianceCacheDescriptorSet;
-        write.dstBinding = 0;
-        write.dstArrayElement = 0;
-        write.descriptorCount = 1;
-        write.descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
-        write.pImageInfo = NULL;
-        write.pBufferInfo = &storageBufferInfo;
-        write.pTexelBufferView = NULL;
-        vkUpdateDescriptorSets(device->logical, 1, &write, 0, NULL);
-    }
-
     /* RENDER PASSES */
     createGeometryRenderPass(
         device->logical,
@@ -720,7 +614,6 @@ void Renderer_init(
     {
         VkDescriptorSetLayout setLayouts[] = {
             renderer->cameraDescriptorSetLayout,
-            renderer->surfaceHashIrradianceCacheDescriptorSetLayout,
             renderer->objStorage.descriptorSetLayout,
         };
         createPipelineLayout(
@@ -769,7 +662,6 @@ void Renderer_init(
             renderer->cameraDescriptorSetLayout,
             renderer->gbufferDescriptorSetLayout,
             renderer->shadowVolume.descriptorSetLayout,
-            renderer->surfaceHashIrradianceCacheDescriptorSetLayout,
         };
 
         createPipelineLayout(
@@ -809,60 +701,6 @@ void Renderer_init(
             device->logical,
             fragShaderModule,
             NULL);
-    }
-
-    /* IRRADIANCE CACHE PRESERVE PIPELINE LAYOUT */
-    {
-        VkDescriptorSetLayout setLayouts[] = {
-            renderer->surfaceHashIrradianceCacheDescriptorSetLayout,
-        };
-
-        createPipelineLayout(
-            device->logical,
-            sizeof(setLayouts) / sizeof(setLayouts[0]),
-            setLayouts,
-            0,
-            NULL,
-            &renderer->irradianceCachePreservePipelineLayout);
-    }
-
-    /* IRRADIANCE CAHCE PRESERVE PIPELINE */
-    {
-        VkShaderModule shaderModule;
-        createShaderModule(
-            device->logical,
-            "irradiance_cache_preserve.comp.spv",
-            &shaderModule);
-
-        VkPipelineShaderStageCreateInfo shaderStage;
-        shaderStage.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-        shaderStage.pNext = NULL;
-        shaderStage.flags = 0;
-        shaderStage.stage = VK_SHADER_STAGE_COMPUTE_BIT;
-        shaderStage.module = shaderModule;
-        shaderStage.pName = "main";
-        shaderStage.pSpecializationInfo = NULL;
-
-        VkComputePipelineCreateInfo createInfo;
-        createInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
-        createInfo.pNext = NULL;
-        createInfo.flags = 0;
-        createInfo.stage = shaderStage;
-        createInfo.layout = renderer->irradianceCachePreservePipelineLayout;
-        createInfo.basePipelineHandle = NULL;
-        createInfo.basePipelineIndex = 0;
-
-        handleVkResult(
-            vkCreateComputePipelines(
-                device->logical,
-                VK_NULL_HANDLE,
-                1,
-                &createInfo,
-                NULL,
-                &renderer->irradianceCachePreservePipeline),
-            "creating irradiance cache preserve pipeline");
-
-        vkDestroyShaderModule(device->logical, shaderModule, NULL);
     }
 
     /* FRAMEBUFFERS */
@@ -976,16 +814,11 @@ void Renderer_recreateCommandBuffers(
     for(uint32_t i = 0; i < renderer->swapLen; i++) {
         VkDescriptorSet objGeometryDescriptorSets[] = {
             renderer->cameraDescriptorSets[i],
-            renderer->surfaceHashIrradianceCacheDescriptorSet,
         };
         VkDescriptorSet lightingDescriptorSets[] = {
             renderer->cameraDescriptorSets[i],
             renderer->gbufferDescriptorSet,
             renderer->shadowVolume.descriptorSet,
-            renderer->surfaceHashIrradianceCacheDescriptorSet,
-        };
-        VkDescriptorSet irradianceCachePreserveDescriptorSets[] = {
-            renderer->surfaceHashIrradianceCacheDescriptorSet,
         };
 
         recordRenderCommandBuffer(
@@ -1001,17 +834,13 @@ void Renderer_recreateCommandBuffers(
             lightingClearValues,
             renderer->objGeometryPipeline,
             renderer->lightingPipeline,
-            renderer->irradianceCachePreservePipeline,
             renderer->objGeometryPipelineLayout,
             renderer->lightingPipelineLayout,
-            renderer->irradianceCachePreservePipelineLayout,
             sizeof(objGeometryDescriptorSets) 
             / sizeof(objGeometryDescriptorSets[0]),
             objGeometryDescriptorSets,
             sizeof(lightingDescriptorSets) / sizeof(lightingDescriptorSets[0]),
             lightingDescriptorSets,
-            sizeof(irradianceCachePreserveDescriptorSets) / sizeof(irradianceCachePreserveDescriptorSets[0]),
-            irradianceCachePreserveDescriptorSets,
             objVoxCount,
             objVoxDescriptorSets,
             renderer->commandBuffers[i]);
@@ -1180,16 +1009,6 @@ void Renderer_destroy(
     vkFreeMemory(logicalDevice, renderer->lightAccumulateImageMemory, NULL);
     vkDestroyImageView(logicalDevice, renderer->lightAccumulateImageView, NULL);
 
-    /* STORAGE BUFFERS */
-    vkDestroyBuffer(
-        logicalDevice,
-        renderer->surfaceHashIrradianceCacheBuffer,
-        NULL);
-    vkFreeMemory(
-        logicalDevice,
-        renderer->surfaceHashIrradianceCacheBufferMemory,
-        NULL);
-
     /* UNIFORM BUFFERS */
     vkDestroyBuffer(logicalDevice, renderer->cameraUniformBuffer, NULL);
     vkFreeMemory(logicalDevice, renderer->cameraUniformBufferMemory, NULL);
@@ -1208,10 +1027,6 @@ void Renderer_destroy(
         logicalDevice,
         renderer->gbufferDescriptorSetLayout,
         NULL);
-    vkDestroyDescriptorSetLayout(
-        logicalDevice,
-        renderer->surfaceHashIrradianceCacheDescriptorSetLayout,
-        NULL);
 
     /* PIPELINES AND RENDER PASSES */
     vkDestroyPipelineLayout(
@@ -1226,14 +1041,6 @@ void Renderer_destroy(
     vkDestroyPipeline(logicalDevice, renderer->lightingPipeline, NULL);
     vkDestroyRenderPass(logicalDevice, renderer->geometryRenderPass, NULL);
     vkDestroyRenderPass(logicalDevice, renderer->lightingRenderPass, NULL);
-    vkDestroyPipelineLayout(
-        logicalDevice,
-        renderer->irradianceCachePreservePipelineLayout,
-        NULL);
-    vkDestroyPipeline(
-        logicalDevice,
-        renderer->irradianceCachePreservePipeline,
-        NULL);
 
     /* COMMAND BUFFERS */
     free(renderer->commandBuffers);
