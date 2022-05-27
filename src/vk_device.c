@@ -297,7 +297,9 @@ static bool checkPhysicalDeviceProperties(
     bool foundPresentFamily = false;
 
     for (uint32_t i = 0; i < queueFamilyCount; i++) {
-        if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+        // TODO: seperate compute queue?
+        if ((queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT)
+            && (queueFamilies[i].queueFlags & VK_QUEUE_COMPUTE_BIT)) {
             physicalDeviceProperties->graphicsFamilyIndex = i;
             foundGraphicsFamily = true;
         }

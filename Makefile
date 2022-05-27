@@ -12,7 +12,8 @@ DEPENDS = $(patsubst ./src/%.c, obj/%.d,$(SRCS))
 REQUIREDSHADERS = target/obj.vert.spv \
 				  target/obj.frag.spv \
 				  target/lighting.vert.spv \
-				  target/lighting.frag.spv
+				  target/lighting.frag.spv \
+				  target/irradiance_cache_preserve.comp.spv
 
 LIGHTINGSHADERDEFINES = -DOUTPUT_POSITION=1
 
@@ -40,6 +41,9 @@ target/lighting.vert.spv: src/shaders/lighting.vert
 target/lighting.frag.spv: src/shaders/lighting.frag
 	mkdir -p $(dir $@)
 	glslc $< -o $@ -Isrc/shaders $(LIGHTINGSHADERDEFINES)
+target/irradiance_cache_preserve.comp.spv: src/shaders/irradiance_cache_preserve.comp
+	mkdir -p $(dir $@)
+	glslc $< -o $@ -Isrc/shaders
 
 run: all
 	cd target; ./$(OUTPUTNAME)

@@ -57,19 +57,6 @@ float camDistanceToDepth(float distanceFromCameraPlane)
     return depth;
 }
 
-float getSurfaceIrradiance(uint surfaceHash)
-{
-    uint sampleCount
-        = surfaceHashIrradianceCacheBuffer[surfaceHash * 3]
-        & 0x00FFFFFF;
-    uint sampleTotal
-        = surfaceHashIrradianceCacheBuffer[surfaceHash * 3 + 1];
-    uint sampleTotal2
-        = surfaceHashIrradianceCacheBuffer[surfaceHash * 3 + 1];
-    float irradiance = float(sampleTotal) / float(sampleCount) / 255;
-    return irradiance;
-}
-
 uint generateSurfaceHash(ivec3 objPos) {
     uint id 
         = objPos.x 
@@ -258,12 +245,20 @@ void main()
         hitNormal = calcVoxelNormal(objPosInt);
 
         uint surfaceHash = generateSurfaceHash(objPosInt);
-        float irradiance = getSurfaceIrradiance(surfaceHash);
+        uint sampleCount
+            = surfaceHashIrradianceCacheBuffer[surfaceHash * 3]
+            & 0x00FFFFFF;
+        uint sampleTotal
+            = surfaceHashIrradianceCacheBuffer[surfaceHash * 3 + 1];
+        uint sampleTotal2
+            = surfaceHashIrradianceCacheBuffer[surfaceHash * 3 + 1];
+        float irradiance = float(sampleTotal) / float(sampleCount) / 255;
 
         float distanceFromCameraPlane = t * dot(camDir, dir);
         writeDepth(camDistanceToDepth(distanceFromCameraPlane));
 
-        writeAlbedo(vec4(1.0, 0.0, 0.0, irradiance));
+        float scc = float(sampleCount) / 1000;
+        writeAlbedo(vec4(1-scc, 0.0, scc, irradiance));
         writeNormal(hitNormal);
         writeSurfaceHash(surfaceHash);
     }

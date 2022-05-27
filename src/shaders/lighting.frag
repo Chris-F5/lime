@@ -39,9 +39,6 @@ void recordSampleToSurface(uint surfaceHash, float lightSample)
     atomicAdd(
         surfaceHashIrradianceCacheBuffer[surfaceHash * 3 + 1],
         sampleInt);
-    atomicAdd(
-        surfaceHashIrradianceCacheBuffer[surfaceHash * 3 + 2],
-        (sampleInt * sampleInt) / 255);
 }
 
 uint currentSeed;
@@ -294,4 +291,5 @@ void main() {
     //outColor = vec4(worldPos / 200 * light, 1.0);
     outColor = vec4(light, light, light, 1.0);
     //outColor = vec4(normal, 1.0);
+    //outColor = albedo;
 }

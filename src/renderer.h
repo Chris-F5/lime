@@ -88,6 +88,9 @@ typedef struct {
     VkPipelineLayout lightingPipelineLayout;
     VkPipeline lightingPipeline;
 
+    VkPipelineLayout irradianceCachePreservePipelineLayout;
+    VkPipeline irradianceCachePreservePipeline;
+
     /* RENDER PASSES */
     VkRenderPass geometryRenderPass;
     VkRenderPass lightingRenderPass;
