@@ -12,7 +12,9 @@ DEPENDS = $(patsubst ./src/%.c, obj/%.d,$(SRCS))
 REQUIREDSHADERS = target/obj.vert.spv \
 				  target/obj.frag.spv \
 				  target/lighting.vert.spv \
-				  target/lighting.frag.spv
+				  target/lighting.frag.spv \
+				  target/denoise.vert.spv \
+				  target/denoise.frag.spv
 
 LIGHTINGSHADERDEFINES = -DOUTPUT_POSITION=1
 
@@ -40,6 +42,12 @@ target/lighting.vert.spv: src/shaders/lighting.vert
 target/lighting.frag.spv: src/shaders/lighting.frag
 	mkdir -p $(dir $@)
 	glslc $< -o $@ -Isrc/shaders $(LIGHTINGSHADERDEFINES)
+target/denoise.vert.spv: src/shaders/denoise.vert
+	mkdir -p $(dir $@)
+	glslc $< -o $@ -Isrc/shaders
+target/denoise.frag.spv: src/shaders/denoise.frag
+	mkdir -p $(dir $@)
+	glslc $< -o $@ -Isrc/shaders
 
 run: all
 	cd target; ./$(OUTPUTNAME)

@@ -15,7 +15,7 @@
 
 #define OBJ_VERT_COUNT 36
 
-static void createGeometryFramebuffer(
+static void createFramebuffer(
     VkDevice logicalDevice,
     VkRenderPass renderPass,
     VkExtent2D extent,
@@ -40,7 +40,7 @@ static void createGeometryFramebuffer(
             &framebufferCreateInfo,
             NULL,
             framebuffer),
-        "creating graphics framebuffer");
+        "creating framebuffer");
 }
 
 static void createSwapImageFramebuffers(
@@ -78,7 +78,7 @@ static void createSwapImageFramebuffers(
     }
 }
 
-void createGbufferDescriptorSetLayout(
+void createFragmentImageSamplerDescriptorSetLayout(
     VkDevice logicalDevice,
     uint32_t imageCount,
     VkDescriptorSetLayout* descriptorSetLayout)
@@ -107,11 +107,11 @@ void createGbufferDescriptorSetLayout(
             &layoutCreateInfo,
             NULL,
             descriptorSetLayout),
-        "creating gbuffer descriptor set layout");
+        "creating fragment image sampler descriptor set layout");
     free(bindings);
 }
 
-void updateGbufferDescriptorSetBindings(
+void updateFragmentImageSamplerDescriptorSetBindings(
     VkDevice logicalDevice,
     VkSampler sampler,
     uint32_t imageCount,
@@ -147,20 +147,28 @@ static void recordRenderCommandBuffer(
     VkExtent2D presentExtent,
     VkRenderPass geometryRenderPass,
     VkRenderPass lightingRenderPass,
+    VkRenderPass denoiseRenderPass,
     VkFramebuffer geometryFramebuffer,
     VkFramebuffer lightingFramebuffer,
+    VkFramebuffer denoiseFramebuffer,
     uint32_t geometryPassClearValueCount,
     VkClearValue* geometryPassClearValues,
     uint32_t lightingPassClearValueCount,
     VkClearValue* lightingPassClearValues,
+    uint32_t denoisePassClearValueCount,
+    VkClearValue* denoisePassClearValues,
     VkPipeline objGeometryPipeline,
     VkPipeline lightingPipeline,
+    VkPipeline denoisePipeline,
     VkPipelineLayout objGeometryPipelineLayout,
     VkPipelineLayout lightingPipelineLayout,
+    VkPipelineLayout denoisePipelineLayout,
     uint32_t objGeometryDescriptorSetCount,
     VkDescriptorSet* objGeometryDescriptorSets,
     uint32_t lightingDescriptorSetCount,
     VkDescriptorSet* lightingDescriptorSets,
+    uint32_t denoiseDescriptorSetCount,
+    VkDescriptorSet* denoiseDescriptorSets,
     uint32_t voxObjCount,
     VkDescriptorSet* voxObjDescriptorSets,
     VkCommandBuffer commandBuffer)
@@ -228,22 +236,24 @@ static void recordRenderCommandBuffer(
     vkCmdEndRenderPass(commandBuffer);
 
     /* GRAPHICS -> LIGHTING : MEMORY BARRIERS */
-    VkMemoryBarrier memoryBarrier;
-    memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
-    memoryBarrier.pNext = NULL;
-    memoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
-    memoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
-    vkCmdPipelineBarrier(
-        commandBuffer,
-        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
-        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
-        0,
-        1,
-        &memoryBarrier,
-        0,
-        NULL,
-        0,
-        NULL);
+    {
+        VkMemoryBarrier memoryBarrier;
+        memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        memoryBarrier.pNext = NULL;
+        memoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        memoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        vkCmdPipelineBarrier(
+            commandBuffer,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0,
+            1,
+            &memoryBarrier,
+            0,
+            NULL,
+            0,
+            NULL);
+    }
 
     /* LIGHTING PASS */
     {
@@ -274,6 +284,62 @@ static void recordRenderCommandBuffer(
             0,
             lightingDescriptorSetCount,
             lightingDescriptorSets,
+            0,
+            NULL);
+
+        vkCmdDraw(commandBuffer, 3, 1, 0, 0);
+    }
+    vkCmdEndRenderPass(commandBuffer);
+
+    /* LIGHTING -> DENOISE : MEMORY BARRIERS */
+    {
+        VkMemoryBarrier memoryBarrier;
+        memoryBarrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER;
+        memoryBarrier.pNext = NULL;
+        memoryBarrier.srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+        memoryBarrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        vkCmdPipelineBarrier(
+            commandBuffer,
+            VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT,
+            VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+            0,
+            1,
+            &memoryBarrier,
+            0,
+            NULL,
+            0,
+            NULL);
+    }
+
+    /* DENOISE PASS */
+    {
+        VkRenderPassBeginInfo renderPassInfo;
+        renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+        renderPassInfo.pNext = NULL;
+        renderPassInfo.renderPass = denoiseRenderPass;
+        renderPassInfo.framebuffer = denoiseFramebuffer;
+        renderPassInfo.renderArea.offset = (VkOffset2D) { 0, 0 };
+        renderPassInfo.renderArea.extent = presentExtent;
+        renderPassInfo.clearValueCount = denoisePassClearValueCount;
+        renderPassInfo.pClearValues = denoisePassClearValues;
+
+        vkCmdBeginRenderPass(
+            commandBuffer,
+            &renderPassInfo,
+            VK_SUBPASS_CONTENTS_INLINE);
+
+        vkCmdBindPipeline(
+            commandBuffer,
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            denoisePipeline);
+
+        vkCmdBindDescriptorSets(
+            commandBuffer,
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            denoisePipelineLayout,
+            0,
+            denoiseDescriptorSetCount,
+            denoiseDescriptorSets,
             0,
             NULL);
 
@@ -415,6 +481,17 @@ void Renderer_init(
         = sizeof(gbufferColorImageFormats)
         / sizeof(gbufferColorImageFormats[0]);
 
+    /* IRRADIANCE IMAGE */
+    renderer->irradianceImageFormat = VK_FORMAT_B8G8R8A8_UNORM;
+    createColorAttachmentImage(
+        device->logical,
+        device->physical,
+        renderer->irradianceImageFormat,
+        renderer->presentExtent,
+        &renderer->irradianceImage,
+        &renderer->irradianceImageMemory,
+        &renderer->irradianceImageView);
+
     /* GBUFFER SAMPLER */
     {
         VkSamplerCreateInfo createInfo;
@@ -435,13 +512,44 @@ void Renderer_init(
         createInfo.minLod = 0.0f;
         createInfo.maxLod = 0.0f;
         createInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
-        createInfo.unnormalizedCoordinates = VK_FALSE;
-        handleVkResult(vkCreateSampler(
-                           device->logical,
-                           &createInfo,
-                           NULL,
-                           &renderer->gbufferSampler),
+        createInfo.unnormalizedCoordinates = VK_TRUE;
+        handleVkResult(
+            vkCreateSampler(
+                device->logical,
+                &createInfo,
+                NULL,
+                &renderer->gbufferSampler),
             "creating gbuffer sampler");
+    }
+
+    /* IRRADIANCE SAMPLER */
+    {
+        VkSamplerCreateInfo createInfo;
+        createInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        createInfo.pNext = NULL;
+        createInfo.flags = 0;
+        createInfo.magFilter = VK_FILTER_NEAREST;
+        createInfo.minFilter = VK_FILTER_NEAREST;
+        createInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+        createInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        createInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        createInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT;
+        createInfo.mipLodBias = 0.0f;
+        createInfo.anisotropyEnable = VK_FALSE;
+        createInfo.maxAnisotropy = 0.0f;
+        createInfo.compareEnable = VK_FALSE;
+        createInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        createInfo.minLod = 0.0f;
+        createInfo.maxLod = 0.0f;
+        createInfo.borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_BLACK;
+        createInfo.unnormalizedCoordinates = VK_TRUE;
+        handleVkResult(
+            vkCreateSampler(
+                device->logical,
+                &createInfo,
+                NULL,
+                &renderer->irradianceSampler),
+            "creating irradiance sampler");
     }
 
     /* STORAGE IMAGES */
@@ -475,7 +583,7 @@ void Renderer_init(
 
         VkDescriptorPoolSize gbufferPoolSize;
         gbufferPoolSize.type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        gbufferPoolSize.descriptorCount = gbufferAttachmentCount;
+        gbufferPoolSize.descriptorCount = gbufferAttachmentCount + 1;
 
         VkDescriptorPoolSize storageImagePoolSize;
         storageImagePoolSize.type = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
@@ -496,7 +604,7 @@ void Renderer_init(
         poolCreateInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolCreateInfo.pNext = NULL;
         poolCreateInfo.flags = 0;
-        poolCreateInfo.maxSets = renderer->swapLen + 3;
+        poolCreateInfo.maxSets = renderer->swapLen + 4;
         poolCreateInfo.poolSizeCount = sizeof(poolSizes) / sizeof(poolSizes[0]);
         poolCreateInfo.pPoolSizes = poolSizes;
 
@@ -580,23 +688,40 @@ void Renderer_init(
     }
 
     /* GBUFFER DESCRIPTOR SET */
-    createGbufferDescriptorSetLayout(
+    createFragmentImageSamplerDescriptorSetLayout(
         device->logical,
         sizeof(gbufferImageViews) / sizeof(gbufferImageViews[0]),
         &renderer->gbufferDescriptorSetLayout);
-
     allocateDescriptorSets(
         device->logical,
         renderer->gbufferDescriptorSetLayout,
         renderer->descriptorPool,
         1,
         &renderer->gbufferDescriptorSet);
-    updateGbufferDescriptorSetBindings(
+    updateFragmentImageSamplerDescriptorSetBindings(
         device->logical,
         renderer->gbufferSampler,
         sizeof(gbufferImageViews) / sizeof(gbufferImageViews[0]),
         gbufferImageViews,
         renderer->gbufferDescriptorSet);
+
+    /* IRRADIANCE DESCRIPTOR SET */
+    createFragmentImageSamplerDescriptorSetLayout(
+        device->logical,
+        1,
+        &renderer->irradianceDescriptorSetLayout);
+    allocateDescriptorSets(
+        device->logical,
+        renderer->irradianceDescriptorSetLayout,
+        renderer->descriptorPool,
+        1,
+        &renderer->irradianceDescriptorSet);
+    updateFragmentImageSamplerDescriptorSetBindings(
+        device->logical,
+        renderer->irradianceSampler,
+        1,
+        &renderer->irradianceImageView,
+        renderer->irradianceDescriptorSet);
 
     /* RENDER PASSES */
     createGeometryRenderPass(
@@ -607,8 +732,12 @@ void Renderer_init(
         &renderer->geometryRenderPass);
     createLightingRenderPass(
         device->logical,
-        renderer->swapImageFormat,
+        renderer->irradianceImageFormat,
         &renderer->lightingRenderPass);
+    createDenoiseRenderPass(
+        device->logical,
+        renderer->swapImageFormat,
+        &renderer->denoiseRenderPass);
 
     /* OBJECT GEOMETRY PIPELINE LAYOUT */
     {
@@ -684,7 +813,7 @@ void Renderer_init(
             device->logical,
             "lighting.frag.spv",
             &fragShaderModule);
-        createLightingPipeline(
+        createFullScreenFragPipeline(
             device->logical,
             renderer->lightingPipelineLayout,
             renderer->lightingRenderPass,
@@ -693,6 +822,53 @@ void Renderer_init(
             vertShaderModule,
             fragShaderModule,
             &renderer->lightingPipeline);
+        vkDestroyShaderModule(
+            device->logical,
+            vertShaderModule,
+            NULL);
+        vkDestroyShaderModule(
+            device->logical,
+            fragShaderModule,
+            NULL);
+    }
+
+    /* DENOISE PIPELINE LAYOUT */
+    {
+        VkDescriptorSetLayout setLayouts[] = {
+            renderer->cameraDescriptorSetLayout,
+            renderer->gbufferDescriptorSetLayout,
+            renderer->irradianceDescriptorSetLayout,
+        };
+
+        createPipelineLayout(
+            device->logical,
+            sizeof(setLayouts) / sizeof(setLayouts[0]),
+            setLayouts,
+            0,
+            NULL,
+            &renderer->denoisePipelineLayout);
+    }
+
+    /* DENOISE PIPELINE */
+    {
+        VkShaderModule vertShaderModule, fragShaderModule;
+        createShaderModule(
+            device->logical,
+            "denoise.vert.spv",
+            &vertShaderModule);
+        createShaderModule(
+            device->logical,
+            "denoise.frag.spv",
+            &fragShaderModule);
+        createFullScreenFragPipeline(
+            device->logical,
+            renderer->denoisePipelineLayout,
+            renderer->denoiseRenderPass,
+            0,
+            renderer->presentExtent,
+            vertShaderModule,
+            fragShaderModule,
+            &renderer->denoisePipeline);
         vkDestroyShaderModule(
             device->logical,
             vertShaderModule,
@@ -714,13 +890,21 @@ void Renderer_init(
         renderer->swapImageViews,
         renderer->swapImageFramebuffers);
 
-    createGeometryFramebuffer(
+    createFramebuffer(
         device->logical,
         renderer->geometryRenderPass,
         renderer->presentExtent,
         sizeof(gbufferImageViews) / sizeof(gbufferImageViews[0]),
         gbufferImageViews,
         &renderer->geometryFramebuffer);
+
+    createFramebuffer(
+        device->logical,
+        renderer->denoiseRenderPass,
+        renderer->presentExtent,
+        1,
+        &renderer->irradianceImageView,
+        &renderer->irradianceFramebuffer);
 
     /* COMMAND BUFFERS */
     renderer->commandBuffers
@@ -803,6 +987,13 @@ void Renderer_recreateCommandBuffers(
 
     VkClearValue lightingClearValues[1];
     memset(lightingClearValues, 0, sizeof(lightingClearValues));
+    lightingClearValues[0].color.float32[0] = 0.0f;
+    lightingClearValues[0].color.float32[1] = 0.0f;
+    lightingClearValues[0].color.float32[2] = 0.0f;
+    lightingClearValues[0].color.float32[3] = 0.0f;
+
+    VkClearValue denoiseClearValues[1];
+    memset(denoiseClearValues, 0, sizeof(denoiseClearValues));
     lightingClearValues[0].color.float32[0] = 128.0f / 255.0;
     lightingClearValues[0].color.float32[1] = 218.0f / 255.0;
     lightingClearValues[0].color.float32[2] = 251.0f / 255.0;
@@ -820,27 +1011,40 @@ void Renderer_recreateCommandBuffers(
             renderer->gbufferDescriptorSet,
             renderer->shadowVolume.descriptorSet,
         };
+        VkDescriptorSet denoiseDescriptorSets[] = {
+            renderer->cameraDescriptorSets[i],
+            renderer->gbufferDescriptorSet,
+            renderer->irradianceDescriptorSet,
+        };
 
         recordRenderCommandBuffer(
             logicalDevice,
             renderer->presentExtent,
             renderer->geometryRenderPass,
             renderer->lightingRenderPass,
+            renderer->denoiseRenderPass,
             renderer->geometryFramebuffer,
+            renderer->irradianceFramebuffer,
             renderer->swapImageFramebuffers[i],
             sizeof(geometryClearValues) / sizeof(geometryClearValues[0]),
             geometryClearValues,
             sizeof(lightingClearValues) / sizeof(lightingClearValues[0]),
             lightingClearValues,
+            sizeof(denoiseClearValues) / sizeof(denoiseClearValues[0]),
+            denoiseClearValues,
             renderer->objGeometryPipeline,
             renderer->lightingPipeline,
+            renderer->denoisePipeline,
             renderer->objGeometryPipelineLayout,
             renderer->lightingPipelineLayout,
+            renderer->denoisePipelineLayout,
             sizeof(objGeometryDescriptorSets) 
             / sizeof(objGeometryDescriptorSets[0]),
             objGeometryDescriptorSets,
             sizeof(lightingDescriptorSets) / sizeof(lightingDescriptorSets[0]),
             lightingDescriptorSets,
+            sizeof(denoiseDescriptorSets) / sizeof(denoiseDescriptorSets[0]),
+            denoiseDescriptorSets,
             objVoxCount,
             objVoxDescriptorSets,
             renderer->commandBuffers[i]);
@@ -982,6 +1186,10 @@ void Renderer_destroy(
         logicalDevice,
         renderer->geometryFramebuffer,
         NULL);
+    vkDestroyFramebuffer(
+        logicalDevice,
+        renderer->irradianceFramebuffer,
+        NULL);
     free(renderer->swapImages);
     free(renderer->swapImageViews);
     free(renderer->swapImageFramebuffers);
@@ -1003,11 +1211,16 @@ void Renderer_destroy(
     vkFreeMemory(logicalDevice, renderer->surfaceHashImageMemory, NULL);
     vkDestroyImageView(logicalDevice, renderer->surfaceHashImageView, NULL);
 
-    vkDestroySampler(logicalDevice, renderer->gbufferSampler, NULL);
-
     vkDestroyImage(logicalDevice, renderer->lightAccumulateImage, NULL);
     vkFreeMemory(logicalDevice, renderer->lightAccumulateImageMemory, NULL);
     vkDestroyImageView(logicalDevice, renderer->lightAccumulateImageView, NULL);
+
+    vkDestroyImage(logicalDevice, renderer->irradianceImage, NULL);
+    vkFreeMemory(logicalDevice, renderer->irradianceImageMemory, NULL);
+    vkDestroyImageView(logicalDevice, renderer->irradianceImageView, NULL);
+
+    vkDestroySampler(logicalDevice, renderer->gbufferSampler, NULL);
+    vkDestroySampler(logicalDevice, renderer->irradianceSampler, NULL);
 
     /* UNIFORM BUFFERS */
     vkDestroyBuffer(logicalDevice, renderer->cameraUniformBuffer, NULL);
@@ -1027,6 +1240,10 @@ void Renderer_destroy(
         logicalDevice,
         renderer->gbufferDescriptorSetLayout,
         NULL);
+    vkDestroyDescriptorSetLayout(
+        logicalDevice,
+        renderer->irradianceDescriptorSetLayout,
+        NULL);
 
     /* PIPELINES AND RENDER PASSES */
     vkDestroyPipelineLayout(
@@ -1034,13 +1251,22 @@ void Renderer_destroy(
         renderer->objGeometryPipelineLayout,
         NULL);
     vkDestroyPipeline(logicalDevice, renderer->objGeometryPipeline, NULL);
+
     vkDestroyPipelineLayout(
         logicalDevice,
         renderer->lightingPipelineLayout,
         NULL);
     vkDestroyPipeline(logicalDevice, renderer->lightingPipeline, NULL);
+    
+    vkDestroyPipelineLayout(
+        logicalDevice,
+        renderer->denoisePipelineLayout,
+        NULL);
+    vkDestroyPipeline(logicalDevice, renderer->denoisePipeline, NULL);
+
     vkDestroyRenderPass(logicalDevice, renderer->geometryRenderPass, NULL);
     vkDestroyRenderPass(logicalDevice, renderer->lightingRenderPass, NULL);
+    vkDestroyRenderPass(logicalDevice, renderer->denoiseRenderPass, NULL);
 
     /* COMMAND BUFFERS */
     free(renderer->commandBuffers);

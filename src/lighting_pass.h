@@ -5,15 +5,20 @@
 
 void createLightingRenderPass(
     VkDevice logicalDevice,
+    VkFormat irradianceImageFormat,
+    VkRenderPass* renderPass);
+
+void createDenoiseRenderPass(
+    VkDevice logicalDevice,
     VkFormat swapImageFormat,
     VkRenderPass* renderPass);
 
-void createLightingPipeline(
+void createFullScreenFragPipeline(
     VkDevice logicalDevice,
     VkPipelineLayout layout,
     VkRenderPass renderPass,
     uint32_t subpassIndex,
-    VkExtent2D presentExtent,
+    VkExtent2D extent,
     VkShaderModule vertShaderModule,
     VkShaderModule fragShaderModule,
     VkPipeline* pipeline);

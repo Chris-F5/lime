@@ -52,9 +52,16 @@ typedef struct {
     VkImage surfaceHashImage;
     VkDeviceMemory surfaceHashImageMemory;
     VkImageView surfaceHashImageView;
+
+    /* IMAGES */
+    VkFormat irradianceImageFormat;
+    VkImage irradianceImage;
+    VkDeviceMemory irradianceImageMemory;
+    VkImageView irradianceImageView;
     
     /* SAMPLERS */
     VkSampler gbufferSampler;
+    VkSampler irradianceSampler;
 
     /* STORAGE IMAGES */
     VkImage lightAccumulateImage;
@@ -74,6 +81,9 @@ typedef struct {
     VkDescriptorSetLayout gbufferDescriptorSetLayout;
     VkDescriptorSet gbufferDescriptorSet;
 
+    VkDescriptorSetLayout irradianceDescriptorSetLayout;
+    VkDescriptorSet irradianceDescriptorSet;
+
     /* PIPELINES */
     VkPipelineLayout objGeometryPipelineLayout;
     VkPipeline objGeometryPipeline;
@@ -81,12 +91,17 @@ typedef struct {
     VkPipelineLayout lightingPipelineLayout;
     VkPipeline lightingPipeline;
 
+    VkPipelineLayout denoisePipelineLayout;
+    VkPipeline denoisePipeline;
+
     /* RENDER PASSES */
     VkRenderPass geometryRenderPass;
     VkRenderPass lightingRenderPass;
+    VkRenderPass denoiseRenderPass;
 
     /* FRAMEBUFFERS */
     VkFramebuffer geometryFramebuffer;
+    VkFramebuffer irradianceFramebuffer;
     VkFramebuffer* swapImageFramebuffers;
 
     /* COMMAND BUFFERS */

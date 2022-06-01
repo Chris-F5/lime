@@ -4,28 +4,28 @@
 
 void createLightingRenderPass(
     VkDevice logicalDevice,
-    VkFormat swapImageFormat,
+    VkFormat irradianceImageFormat,
     VkRenderPass* renderPass)
 {
     /* ATTACHMENTS */
-    VkAttachmentDescription swapAttachment;
-    swapAttachment.flags = 0;
-    swapAttachment.format = swapImageFormat;
-    swapAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
-    swapAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-    swapAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-    swapAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-    swapAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-    swapAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    swapAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    VkAttachmentDescription irradianceAttachment;
+    irradianceAttachment.flags = 0;
+    irradianceAttachment.format = irradianceImageFormat;
+    irradianceAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    irradianceAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    irradianceAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    irradianceAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    irradianceAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    irradianceAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    irradianceAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
     /* SUBPASS */
-    VkAttachmentReference swapAttachmentRef;
-    swapAttachmentRef.attachment = 0;
-    swapAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+    VkAttachmentReference irradianceAttachmentRef;
+    irradianceAttachmentRef.attachment = 0;
+    irradianceAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
     VkAttachmentReference colorAttachments[] = {
-        swapAttachmentRef,
+        irradianceAttachmentRef,
     };
 
     VkSubpassDescription lightingSubpass;
@@ -59,7 +59,7 @@ void createLightingRenderPass(
 
     /* RENDER PASS */
     VkAttachmentDescription attachments[] = {
-        swapAttachment,
+        irradianceAttachment,
     };
     VkSubpassDescription subpasses[] = {
         lightingSubpass,
@@ -91,12 +91,101 @@ void createLightingRenderPass(
         "creating lighting render pass");
 }
 
-void createLightingPipeline(
+void createDenoiseRenderPass(
+    VkDevice logicalDevice,
+    VkFormat swapImageFormat,
+    VkRenderPass* renderPass)
+{
+    /* ATTACHMENTS */
+    VkAttachmentDescription swapAttachment;
+    swapAttachment.flags = 0;
+    swapAttachment.format = swapImageFormat;
+    swapAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+    swapAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+    swapAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+    swapAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+    swapAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+    swapAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    swapAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+    /* SUBPASS */
+    VkAttachmentReference swapAttachmentRef;
+    swapAttachmentRef.attachment = 0;
+    swapAttachmentRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+    VkAttachmentReference colorAttachments[] = {
+        swapAttachmentRef,
+    };
+
+    VkSubpassDescription subpass;
+    subpass.flags = 0;
+    subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+    subpass.inputAttachmentCount = 0;
+    subpass.pInputAttachments = NULL;
+    subpass.colorAttachmentCount
+        = sizeof(colorAttachments) / sizeof(colorAttachments[0]);
+    subpass.pColorAttachments = colorAttachments;
+    subpass.pResolveAttachments = NULL;
+    subpass.pDepthStencilAttachment = NULL;
+    subpass.preserveAttachmentCount = 0;
+    subpass.pPreserveAttachments = NULL;
+
+    /* SUBPASS DEPENDENCIES */
+    VkSubpassDependency subpassDependency;
+    subpassDependency.srcSubpass = VK_SUBPASS_EXTERNAL;
+    subpassDependency.dstSubpass = 0;
+    subpassDependency.srcStageMask
+        = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+        | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    subpassDependency.dstStageMask
+        = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+        | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
+        | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+    subpassDependency.srcAccessMask = 0;
+    subpassDependency.dstAccessMask
+        = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    subpassDependency.dependencyFlags = 0;
+
+    /* RENDER PASS */
+    VkAttachmentDescription attachments[] = {
+        swapAttachment,
+    };
+    VkSubpassDescription subpasses[] = {
+        subpass,
+    };
+    VkSubpassDependency subpassDependencies[] = {
+        subpassDependency,
+    };
+
+    VkRenderPassCreateInfo renderPassCreateInfo;
+    renderPassCreateInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+    renderPassCreateInfo.pNext = NULL;
+    renderPassCreateInfo.flags = 0;
+    renderPassCreateInfo.attachmentCount
+        = sizeof(attachments) / sizeof(attachments[0]);
+    renderPassCreateInfo.pAttachments = attachments;
+    renderPassCreateInfo.subpassCount
+        = sizeof(subpasses) / sizeof(subpasses[0]);
+    renderPassCreateInfo.pSubpasses = subpasses;
+    renderPassCreateInfo.dependencyCount
+        = sizeof(subpassDependencies) / sizeof(subpassDependencies[0]);
+    renderPassCreateInfo.pDependencies = subpassDependencies;
+
+    handleVkResult(
+        vkCreateRenderPass(
+            logicalDevice,
+            &renderPassCreateInfo,
+            NULL,
+            renderPass),
+        "creating denoise render pass");
+}
+
+void createFullScreenFragPipeline(
     VkDevice logicalDevice,
     VkPipelineLayout layout,
     VkRenderPass renderPass,
     uint32_t subpassIndex,
-    VkExtent2D presentExtent,
+    VkExtent2D extent,
     VkShaderModule vertShaderModule,
     VkShaderModule fragShaderModule,
     VkPipeline* pipeline)
@@ -143,15 +232,15 @@ void createLightingPipeline(
     VkViewport viewport;
     viewport.x = 0.0f;
     viewport.y = 0.0f;
-    viewport.width = (float)presentExtent.width;
-    viewport.height = (float)presentExtent.height;
+    viewport.width = (float)extent.width;
+    viewport.height = (float)extent.height;
     viewport.minDepth = 0.0f;
     viewport.maxDepth = 1.0f;
 
     VkRect2D scissor;
     scissor.offset.x = 0;
     scissor.offset.y = 0;
-    scissor.extent = presentExtent;
+    scissor.extent = extent;
 
     VkPipelineViewportStateCreateInfo viewportInfo;
     viewportInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
@@ -193,22 +282,22 @@ void createLightingPipeline(
     multisamplingInfo.alphaToOneEnable = VK_FALSE;
 
     /* COLOR BLENDING */
-    VkPipelineColorBlendAttachmentState swapBlendAttachment;
-    swapBlendAttachment.blendEnable = VK_FALSE;
-    swapBlendAttachment.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-    swapBlendAttachment.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-    swapBlendAttachment.colorBlendOp = VK_BLEND_OP_ADD;
-    swapBlendAttachment.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-    swapBlendAttachment.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-    swapBlendAttachment.alphaBlendOp = VK_BLEND_OP_ADD;
-    swapBlendAttachment.colorWriteMask
+    VkPipelineColorBlendAttachmentState blend;
+    blend.blendEnable = VK_FALSE;
+    blend.srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+    blend.dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blend.colorBlendOp = VK_BLEND_OP_ADD;
+    blend.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    blend.dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+    blend.alphaBlendOp = VK_BLEND_OP_ADD;
+    blend.colorWriteMask
         = VK_COLOR_COMPONENT_R_BIT
         | VK_COLOR_COMPONENT_G_BIT
         | VK_COLOR_COMPONENT_B_BIT
         | VK_COLOR_COMPONENT_A_BIT;
 
     VkPipelineColorBlendAttachmentState blendAttachments[] = {
-        swapBlendAttachment,
+        blend,
     };
 
     VkPipelineColorBlendStateCreateInfo colorBlendInfo;
@@ -261,3 +350,4 @@ void createLightingPipeline(
             pipeline),
         "creating lighting pipeline");
 }
+
