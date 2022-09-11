@@ -240,19 +240,14 @@ float sampleSkyLight(vec3 rayDir) {
 void main() {
     // TODO: improve rng
     currentSeed
-        = uint(gl_FragCoord.x) ^ uint(time) + uint(gl_FragCoord.y) * 100 + uint(time);
-    randomByte();
-    randomByte();
-    randomByte();
-    randomByte();
-    randomByte();
+        = uint(gl_FragCoord.x) + uint(gl_FragCoord.y) * 100;
     randomByte();
     currentGoldenRandom.x = randomByte() / 255.0;
     currentGoldenRandom.y = randomByte() / 255.0;
 
     float depth = texelFetch(samplerDepth, ivec2(gl_FragCoord), 0).r;
     if (depth == 1) {
-        outColor = vec4(128.0 / 255.0, 218.0 / 255.0, 251.0 / 255.0, 1.0);
+        //outColor = vec4(128.0 / 255.0, 218.0 / 255.0, 251.0 / 255.0, 1.0);
         return;
     }
 

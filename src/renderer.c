@@ -987,17 +987,13 @@ void Renderer_recreateCommandBuffers(
 
     VkClearValue lightingClearValues[1];
     memset(lightingClearValues, 0, sizeof(lightingClearValues));
-    lightingClearValues[0].color.float32[0] = 0.0f;
-    lightingClearValues[0].color.float32[1] = 0.0f;
-    lightingClearValues[0].color.float32[2] = 0.0f;
-    lightingClearValues[0].color.float32[3] = 0.0f;
 
     VkClearValue denoiseClearValues[1];
     memset(denoiseClearValues, 0, sizeof(denoiseClearValues));
-    lightingClearValues[0].color.float32[0] = 128.0f / 255.0;
-    lightingClearValues[0].color.float32[1] = 218.0f / 255.0;
-    lightingClearValues[0].color.float32[2] = 251.0f / 255.0;
-    lightingClearValues[0].color.float32[3] = 1.0f;
+    denoiseClearValues[0].color.float32[0] = 128.0f / 255.0;
+    denoiseClearValues[0].color.float32[1] = 218.0f / 255.0;
+    denoiseClearValues[0].color.float32[2] = 251.0f / 255.0;
+    denoiseClearValues[0].color.float32[3] = 1.0f;
 
     uint32_t objVoxCount = renderer->objStorage.filled;
     VkDescriptorSet* objVoxDescriptorSets = renderer->objStorage.descriptorSets;

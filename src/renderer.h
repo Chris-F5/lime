@@ -58,7 +58,7 @@ typedef struct {
     VkImage irradianceImage;
     VkDeviceMemory irradianceImageMemory;
     VkImageView irradianceImageView;
-    
+
     /* SAMPLERS */
     VkSampler gbufferSampler;
     VkSampler irradianceSampler;

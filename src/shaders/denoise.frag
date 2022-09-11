@@ -48,8 +48,27 @@ float getIrradiance() {
     return irradiance;
 }
 
+vec3 depthToWorld(vec2 uv, float depth) {
+    vec4 clipSpacePosition = vec4(uv * 2.0 - 1.0, depth, 1.0);
+
+    vec4 viewSpacePosition = inverse(proj) * clipSpacePosition;
+    viewSpacePosition /= viewSpacePosition.w;
+
+    vec4 worldSpacePosition = inverse(view) * viewSpacePosition;
+
+    return worldSpacePosition.xyz;
+}
+
 void main() {
-    float irradiance = getIrradiance();
-    outColor = vec4(irradiance);
-    //outColor = vec4(texelFetch(samplerIrradiance, ivec2(gl_FragCoord), 0));
+    //float irradiance = getIrradiance();
+    float irradiance = texelFetch(samplerIrradiance, ivec2(gl_FragCoord), 0).r;
+
+    float depth = texelFetch(samplerDepth, ivec2(gl_FragCoord), 0).r;
+    if(depth == 1) {
+        outColor = vec4(128.0 / 255.0, 218.0 / 255.0, 251.0 / 255.0, 1.0);
+        return;
+    }
+
+    vec3 worldPos = depthToWorld(inUV, depth);
+    outColor = vec4(irradiance * worldPos/200, 1.0);
 }
