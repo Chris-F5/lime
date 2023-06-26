@@ -146,17 +146,27 @@ create_renderer(struct lime_renderer *renderer, GLFWwindow* window)
     PRINT_VK_ERROR(err, "creating window surface");
     exit(1);
   }
+  renderer->surface_format.format = VK_FORMAT_B8G8R8A8_UNORM;
+  renderer->surface_format.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+  renderer->present_mode = VK_PRESENT_MODE_FIFO_KHR;
+  renderer->depth_image_format = VK_FORMAT_D32_SFLOAT;
+  create_hardware_table(&renderer->hardware, renderer->instance,
+    renderer->surface);
+  create_queue_family_table(&renderer->queue_families, &renderer->hardware,
+    renderer->instance, renderer->surface);
 }
 
 void
 destroy_renderer(struct lime_renderer *renderer)
 {
   PFN_vkDestroyDebugUtilsMessengerEXT debug_messenger_destroy_func;
+  destroy_queue_family_table(&renderer->queue_families);
+  destroy_hardware_table(&renderer->hardware);
   vkDestroySurfaceKHR(renderer->instance, renderer->surface, NULL);
   debug_messenger_destroy_func = (PFN_vkDestroyDebugUtilsMessengerEXT)
     vkGetInstanceProcAddr(renderer->instance,"vkDestroyDebugUtilsMessengerEXT");
   if (debug_messenger_destroy_func != NULL)
     debug_messenger_destroy_func(renderer->instance, renderer->debug_messenger,
-        NULL);
+      NULL);
   vkDestroyInstance(renderer->instance, NULL);
 }

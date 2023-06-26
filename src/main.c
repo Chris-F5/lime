@@ -31,7 +31,8 @@ main(int argc, char **argv)
   window = glfwCreateWindow(WIDTH, HEIGHT, "lime demo", NULL, NULL);
 
   create_renderer(&renderer, window);
-  printf("hello world\n");
+  printf("gpu count: %d\n", renderer.hardware.count);
+  printf("queue family count: %d\n", renderer.queue_families.count);
 
   while (!glfwWindowShouldClose(window))
     glfwPollEvents();
