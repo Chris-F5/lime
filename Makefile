@@ -1,62 +1,20 @@
-OUTPUTNAME = renderer
-CC = gcc
-CFLAGS = -g -D DEBUG -I src
-LDFLAGS = -l glfw -l vulkan -l cglm -l m
-SRCS = $(shell find ./src -type f -name "*.c")
-HEADERS = $(shell find ./src -type f -name "*.h")
-OBJS = $(patsubst ./src/%.c, obj/%.o, $(SRCS))
-DEPENDS = $(patsubst ./src/%.c, obj/%.d,$(SRCS))
+OUTPUTNAME=renderer
+CC=gcc
+CFLAGS=-g -D DEBUG
+LDFLAGS=-lglfw -lvulkan -lcglm -lm
+SRC=$(shell find src -type f -name "*.c")
+OBJ=$(patsubst src/%.c, obj/%.o, $(SRC))
 
-.PHONY: all run clean debug valgrind
+.PHONY: run clean
 
-REQUIREDSHADERS = target/obj.vert.spv \
-				  target/obj.frag.spv \
-				  target/lighting.vert.spv \
-				  target/lighting.frag.spv \
-				  target/denoise.vert.spv \
-				  target/denoise.frag.spv
+$(OUTPUTNAME): $(OBJ)
+	$(CC) $(OBJ) -o $@ $(LDFLAGS)
 
-LIGHTINGSHADERDEFINES = -DOUTPUT_POSITION=1
-
-all: target/$(OUTPUTNAME) $(REQUIREDSHADERS)
-
--include $(DEPENDS)
-
-target/$(OUTPUTNAME): $(OBJS) $(HEADERS)
-	mkdir -p target
-	$(CC) $(CFLAGS) $(OBJS) -o $@ $(LDFLAGS)
-
-obj/%.o: src/%.c
+obj/%.o: src/%.c src/lime.h
 	mkdir -p $(dir $@)
-	$(CC) $(CFLAGS) -MMD -MP -c $< -o $@ $(LDFLAGS)
+	$(CC) -c $(CFLAGS) $< -o $@
 
-target/obj.vert.spv: src/shaders/obj.vert
-	mkdir -p $(dir $@)
-	glslc $< -o $@ -Isrc/shaders
-target/obj.frag.spv: src/shaders/obj.frag
-	mkdir -p $(dir $@)
-	glslc $< -o $@ -Isrc/shaders
-target/lighting.vert.spv: src/shaders/lighting.vert
-	mkdir -p $(dir $@)
-	glslc $< -o $@ -Isrc/shaders
-target/lighting.frag.spv: src/shaders/lighting.frag
-	mkdir -p $(dir $@)
-	glslc $< -o $@ -Isrc/shaders $(LIGHTINGSHADERDEFINES)
-target/denoise.vert.spv: src/shaders/denoise.vert
-	mkdir -p $(dir $@)
-	glslc $< -o $@ -Isrc/shaders
-target/denoise.frag.spv: src/shaders/denoise.frag
-	mkdir -p $(dir $@)
-	glslc $< -o $@ -Isrc/shaders
-
-run: all
-	cd target; ./$(OUTPUTNAME)
-
-debug: all
-	cd target; gdb $(OUTPUTNAME)
-
-valgrind: all
-	cd target; valgrind ./$(OUTPUTNAME)
-
+run: $(OUTPUTNAME)
+	./$(OUTPUTNAME)
 clean:
-	rm -fr target obj
+	rm -fr obj $(OUTPUTNAME)
