@@ -3,18 +3,7 @@
       string, vkresult_to_string(err)); \
   }
 
-struct lime_queue_family_table {
-  int count, allocated;
-  int *hardware_id, *family_index;
-  VkQueueFamilyProperties *properties;
-};
-
-struct lime_hardware_table {
-  int count;
-  VkPhysicalDevice *device;
-  VkSurfaceCapabilitiesKHR *surface_capabilities;
-};
-
+/*
 struct lime_render_queue_table {
   int count, allocated;
   VkQueue *queue;
@@ -66,6 +55,21 @@ struct lime_command_buffer_table {
   int *device_id;
   VkCommandBuffer *command_buffer;
 };
+*/
+
+struct lime_queue_family_table {
+  int count, allocated;
+  VkPhysicalDevice *physical_device;
+  int *family_index;
+  VkQueueFamilyProperties *properties;
+};
+
+struct lime_physical_device_table {
+  int count;
+  VkPhysicalDevice *physical_device;
+  VkPhysicalDeviceProperties *properties;
+  VkSurfaceCapabilitiesKHR *surface_capabilities;
+};
 
 struct lime_renderer {
   int validation_layers_enabled;
@@ -77,7 +81,7 @@ struct lime_renderer {
   VkPresentModeKHR present_mode;
   VkFormat depth_image_format;
 
-  struct lime_hardware_table hardware;
+  struct lime_physical_device_table physical_devices;
   struct lime_queue_family_table queue_families;
 };
 
@@ -91,11 +95,15 @@ void create_renderer(struct lime_renderer *renderer, GLFWwindow* window);
 void destroy_renderer(struct lime_renderer *renderer);
 
 /* hardware_table.c */
-void create_hardware_table(struct lime_hardware_table *table,
-  VkInstance instance, VkSurfaceKHR surface);
-void destroy_hardware_table(struct lime_hardware_table *table);
-void create_queue_family_table(
-    struct lime_queue_family_table *queue_family_table,
-    const struct lime_hardware_table *hardware_table, VkInstance instance,
-    VkSurfaceKHR surface);
+void create_physical_device_table(struct lime_physical_device_table *table,
+    VkInstance instance, VkSurfaceKHR surface);
+void destroy_physical_device_table(struct lime_physical_device_table *table);
+void create_queue_family_table(struct lime_queue_family_table *queue_family_table,
+    const struct lime_physical_device_table *physical_device_table,
+    VkInstance instance, VkSurfaceKHR surface);
+int select_queue_family_with_flags(const struct lime_queue_family_table *table,
+    VkPhysicalDevice phsyical_device, uint32_t required_flags);
+int select_present_queue_family(
+    const struct lime_queue_family_table *table,
+    VkPhysicalDevice phsyical_device, VkSurfaceKHR surface);
 void destroy_queue_family_table(struct lime_queue_family_table *table);

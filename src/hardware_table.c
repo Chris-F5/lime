@@ -7,17 +7,16 @@
 static void allocate_queue_family_table_records(
     struct lime_queue_family_table *table, int required);
 static void add_device_queue_families(struct lime_queue_family_table *table,
-    int hardware_id, VkPhysicalDevice physical_device, VkInstance instance,
-    VkSurfaceKHR surface);
+    VkPhysicalDevice physical_device, VkInstance instance);
 
 static void
 allocate_queue_family_table_records(struct lime_queue_family_table *table,
-    int required)
+   int required)
 {
   if (required > table->allocated) {
     table->allocated = required;
-    table->hardware_id = xrealloc(table->hardware_id,
-        table->allocated * sizeof(int));
+    table->physical_device = xrealloc(table->physical_device,
+        table->allocated * sizeof(VkPhysicalDevice));
     table->family_index = xrealloc(table->family_index,
         table->allocated * sizeof(int));
     table->properties = xrealloc(table->properties,
@@ -26,8 +25,8 @@ allocate_queue_family_table_records(struct lime_queue_family_table *table,
 }
 
 static void
-add_device_queue_families(struct lime_queue_family_table *table, int hardware_id,
-    VkPhysicalDevice physical_device, VkInstance instance, VkSurfaceKHR surface)
+add_device_queue_families(struct lime_queue_family_table *table,
+    VkPhysicalDevice physical_device, VkInstance instance)
 {
   int family_count, i;
   vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &family_count, NULL);
@@ -35,15 +34,15 @@ add_device_queue_families(struct lime_queue_family_table *table, int hardware_id
   vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &family_count,
       table->properties + table->count);
   for (i = 0; i < family_count; i++ ) {
-    table->hardware_id[table->count + i] = hardware_id;
+    table->physical_device[table->count + i] = physical_device;
     table->family_index[table->count + i] = i;
   }
   table->count += family_count;
 }
 
 void
-create_hardware_table(struct lime_hardware_table *table, VkInstance instance,
-    VkSurfaceKHR surface)
+create_physical_device_table(struct lime_physical_device_table *table,
+    VkInstance instance, VkSurfaceKHR surface)
 {
   VkResult err;
   int i;
@@ -52,52 +51,89 @@ create_hardware_table(struct lime_hardware_table *table, VkInstance instance,
     PRINT_VK_ERROR(err, "enumerating physical devices");
     exit(1);
   }
-  table->device = xmalloc(table->count * sizeof(VkPhysicalDevice));
-  table->surface_capabilities = xmalloc(table->count *
-      sizeof(VkSurfaceCapabilitiesKHR));
-  err = vkEnumeratePhysicalDevices(instance, &table->count, table->device);
+  table->physical_device = xmalloc(table->count * sizeof(VkPhysicalDevice));
+  table->properties = xmalloc(table->count * sizeof(VkPhysicalDeviceProperties));
+  table->surface_capabilities = xmalloc(table->count * sizeof(VkSurfaceCapabilitiesKHR));
+  err = vkEnumeratePhysicalDevices(instance, &table->count,
+      table->physical_device);
   if (err != VK_SUCCESS) {
     PRINT_VK_ERROR(err, "enumerating physical devices");
     exit(1);
   }
   for (i = 0; i < table->count; i++) {
-    err = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(table->device[i], surface,
-        &table->surface_capabilities[i]);
+    vkGetPhysicalDeviceProperties(table->physical_device[i], &table->properties[i]);
+    err = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(table->physical_device[i],
+        surface, &table->surface_capabilities[i]);
     if (err != VK_SUCCESS) {
-      PRINT_VK_ERROR(err, "getting hardware surface capabilities");
+      PRINT_VK_ERROR(err, "getting physical device surface capabilities");
       exit(1);
     }
   }
 }
 
 void
-destroy_hardware_table(struct lime_hardware_table *table)
+destroy_physical_device_table(struct lime_physical_device_table *table)
 {
-  free(table->device);
+  free(table->physical_device);
+  free(table->properties);
   free(table->surface_capabilities);
 }
 
 void
 create_queue_family_table(struct lime_queue_family_table *queue_family_table,
-    const struct lime_hardware_table *hardware_table, VkInstance instance,
-    VkSurfaceKHR surface)
+    const struct lime_physical_device_table *physical_device_table,
+    VkInstance instance, VkSurfaceKHR surface)
 {
-  int hardware_id;
+  int i;
   queue_family_table->count = 0;
   queue_family_table->allocated = 0;
-  queue_family_table->hardware_id = NULL;
+  queue_family_table->physical_device = NULL;
   queue_family_table->family_index = NULL;
   queue_family_table->properties = NULL;
-  allocate_queue_family_table_records(queue_family_table, 1);
-  for (hardware_id = 0; hardware_id < hardware_table->count; hardware_id++)
-    add_device_queue_families(queue_family_table, hardware_id,
-        hardware_table->device[hardware_id], instance, surface);
+  for (i = 0; i < physical_device_table->count; i++)
+    add_device_queue_families(queue_family_table,
+        physical_device_table->physical_device[i], instance);
+}
+
+int
+select_queue_family_with_flags(const struct lime_queue_family_table *table,
+    VkPhysicalDevice physical_device, uint32_t required_flags)
+{
+  int i;
+  for (i = 0; i < table->count; i++)
+    if (table->physical_device[i] == physical_device
+        && table->properties[i].queueFlags & required_flags == required_flags)
+      return table->family_index[i];
+  return -1;
+}
+
+int
+select_present_queue_family(
+    const struct lime_queue_family_table *table,
+    VkPhysicalDevice physical_device, VkSurfaceKHR surface)
+{
+  int i;
+  VkResult err;
+  VkBool32 surface_support;
+  for (i = 0; i < table->count; i++) {
+    if (table->physical_device[i] != physical_device)
+      continue;
+    err = vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, i, surface,
+        &surface_support);
+    if (err != VK_SUCCESS) {
+      PRINT_VK_ERROR(err, "getting queue family surface support");
+      exit(1);
+    }
+    if (surface_support)
+      return table->family_index[i];
+  }
+  return -1;
 }
 
 void
 destroy_queue_family_table(struct lime_queue_family_table *table)
 {
-  free(table->hardware_id);
+  free(table->physical_device);
   free(table->family_index);
   free(table->properties);
 }
