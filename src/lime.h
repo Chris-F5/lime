@@ -117,12 +117,14 @@ void destroy_physical_device_table(struct lime_physical_device_table *table);
 void create_queue_family_table(struct lime_queue_family_table *queue_family_table,
     const struct lime_physical_device_table *physical_device_table,
     VkInstance instance, VkSurfaceKHR surface);
+void destroy_queue_family_table(struct lime_queue_family_table *table);
+int check_physical_device_extension_support(VkPhysicalDevice physical_device,
+    int required_extension_count, const char * const *required_extension_names);
 int select_queue_family_with_flags(const struct lime_queue_family_table *table,
     VkPhysicalDevice phsyical_device, uint32_t required_flags);
 int select_queue_family_with_present_support(
     const struct lime_queue_family_table *table,
     VkPhysicalDevice phsyical_device, VkSurfaceKHR surface);
-void destroy_queue_family_table(struct lime_queue_family_table *table);
 
 /* logical_device.c */
 void create_logical_device_table(struct lime_logical_device_table *table);

@@ -171,6 +171,14 @@ create_renderer(struct lime_renderer *renderer, GLFWwindow* window)
     exit(1);
   }
   physical_device = renderer->physical_devices.physical_device[0];
+
+  if(!check_physical_device_extension_support(physical_device,
+        sizeof(DEVICE_EXTENSIONS[0]) / sizeof(DEVICE_EXTENSIONS),
+        DEVICE_EXTENSIONS)) {
+    fprintf(stderr, "graphics card does not have required extension support\n");
+    exit(1);
+  }
+
   graphics_queue_family_index = select_queue_family_with_flags(
       &renderer->queue_families, physical_device, VK_QUEUE_GRAPHICS_BIT);
   present_queue_family_index = select_queue_family_with_present_support(

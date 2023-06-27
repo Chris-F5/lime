@@ -1,6 +1,7 @@
 #include <vulkan/vulkan.h>
 #include <stdio.h>
 #include <GLFW/glfw3.h>
+#include <string.h>
 #include <stdlib.h>
 #include "lime.h"
 
@@ -95,6 +96,47 @@ create_queue_family_table(struct lime_queue_family_table *queue_family_table,
         physical_device_table->physical_device[i], instance);
 }
 
+void
+destroy_queue_family_table(struct lime_queue_family_table *table)
+{
+  free(table->physical_device);
+  free(table->family_index);
+  free(table->properties);
+}
+
+int
+check_physical_device_extension_support(VkPhysicalDevice physical_device,
+    int required_extension_count, const char * const *required_extension_names)
+{
+  VkResult err;
+  int available_extension_count, r, a;
+  VkExtensionProperties *available_extensions;
+
+  err = vkEnumerateDeviceExtensionProperties(physical_device, NULL,
+      &available_extension_count, NULL);
+  if (err != VK_SUCCESS) {
+    PRINT_VK_ERROR(err, "enumerating available physical device extensions");
+    exit(1);
+  }
+  available_extensions = xmalloc(
+      available_extension_count * sizeof(VkExtensionProperties));
+  err = vkEnumerateDeviceExtensionProperties(physical_device, NULL,
+      &available_extension_count, available_extensions);
+  if (err != VK_SUCCESS) {
+    PRINT_VK_ERROR(err, "enumerating available physical device extensions");
+    exit(1);
+  }
+  for (r = 0; r < required_extension_count; r++) {
+    for (a = 0; a < available_extension_count; a++)
+      if (strcmp(required_extension_names[r],
+            available_extensions[a].extensionName) == 0)
+        break;
+    if (a == available_extension_count)
+      return 0;
+  }
+  return 1;
+}
+
 int
 select_queue_family_with_flags(const struct lime_queue_family_table *table,
     VkPhysicalDevice physical_device, uint32_t required_flags)
@@ -128,12 +170,4 @@ select_queue_family_with_present_support(
       return table->family_index[i];
   }
   return -1;
-}
-
-void
-destroy_queue_family_table(struct lime_queue_family_table *table)
-{
-  free(table->physical_device);
-  free(table->family_index);
-  free(table->properties);
 }
