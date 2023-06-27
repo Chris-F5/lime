@@ -57,6 +57,13 @@ struct lime_command_buffer_table {
 };
 */
 
+struct lime_physical_device_table {
+  int count;
+  VkPhysicalDevice *physical_device;
+  VkPhysicalDeviceProperties *properties;
+  VkSurfaceCapabilitiesKHR *surface_capabilities;
+};
+
 struct lime_queue_family_table {
   int count, allocated;
   VkPhysicalDevice *physical_device;
@@ -64,11 +71,18 @@ struct lime_queue_family_table {
   VkQueueFamilyProperties *properties;
 };
 
-struct lime_physical_device_table {
-  int count;
+struct lime_logical_device_table {
+  int count, allocated;
+  VkDevice *logical_device;
   VkPhysicalDevice *physical_device;
-  VkPhysicalDeviceProperties *properties;
-  VkSurfaceCapabilitiesKHR *surface_capabilities;
+};
+
+struct lime_queue_table {
+  int count, allocated;
+  VkDevice *logical_device;
+  int *family_index;
+  int *queue_index;
+  VkQueue *queue;
 };
 
 struct lime_renderer {
@@ -83,6 +97,8 @@ struct lime_renderer {
 
   struct lime_physical_device_table physical_devices;
   struct lime_queue_family_table queue_families;
+  struct lime_logical_device_table logical_devices;
+  struct lime_queue_table device_queues;
 };
 
 /* utils.c */
@@ -103,7 +119,17 @@ void create_queue_family_table(struct lime_queue_family_table *queue_family_tabl
     VkInstance instance, VkSurfaceKHR surface);
 int select_queue_family_with_flags(const struct lime_queue_family_table *table,
     VkPhysicalDevice phsyical_device, uint32_t required_flags);
-int select_present_queue_family(
+int select_queue_family_with_present_support(
     const struct lime_queue_family_table *table,
     VkPhysicalDevice phsyical_device, VkSurfaceKHR surface);
 void destroy_queue_family_table(struct lime_queue_family_table *table);
+
+/* logical_device.c */
+void create_logical_device_table(struct lime_logical_device_table *table);
+void destroy_logical_device_table(struct lime_logical_device_table *table);
+void create_queue_table(struct lime_queue_table *table);
+void destroy_queue_table(struct lime_queue_table *table);
+void create_logical_device(struct lime_logical_device_table *logical_device_table,
+    struct lime_queue_table *queue_table, VkPhysicalDevice physical_device,
+    int queue_family_count, const int *queue_families, int extension_count,
+    const char * const* extension_names, VkPhysicalDeviceFeatures features);

@@ -108,7 +108,7 @@ select_queue_family_with_flags(const struct lime_queue_family_table *table,
 }
 
 int
-select_present_queue_family(
+select_queue_family_with_present_support(
     const struct lime_queue_family_table *table,
     VkPhysicalDevice physical_device, VkSurfaceKHR surface)
 {

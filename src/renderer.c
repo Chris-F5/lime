@@ -6,6 +6,9 @@
 #include "lime.h"
 
 static const char *VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation";
+static const char * const DEVICE_EXTENSIONS[] = {
+  VK_KHR_SWAPCHAIN_EXTENSION_NAME
+};
 
 static int
 check_validation_layer_support(void)
@@ -133,6 +136,11 @@ void
 create_renderer(struct lime_renderer *renderer, GLFWwindow* window)
 {
   VkResult err;
+  VkPhysicalDevice physical_device;
+  int graphics_queue_family_index, present_queue_family_index;
+  int queue_families[2];
+  VkPhysicalDeviceFeatures device_features;
+
   renderer->validation_layers_enabled = check_validation_layer_support();
   if(!renderer->validation_layers_enabled)
     fprintf(stderr, "validation layers are not supported\n");
@@ -150,16 +158,42 @@ create_renderer(struct lime_renderer *renderer, GLFWwindow* window)
   renderer->surface_format.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
   renderer->present_mode = VK_PRESENT_MODE_FIFO_KHR;
   renderer->depth_image_format = VK_FORMAT_D32_SFLOAT;
+
   create_physical_device_table(&renderer->physical_devices, renderer->instance,
       renderer->surface);
   create_queue_family_table(&renderer->queue_families,
       &renderer->physical_devices, renderer->instance, renderer->surface);
+  create_logical_device_table(&renderer->logical_devices);
+  create_queue_table(&renderer->device_queues);
+
+  if (renderer->physical_devices.count == 0) {
+    fprintf(stderr, "no graphics cards with vulkan support found\n");
+    exit(1);
+  }
+  physical_device = renderer->physical_devices.physical_device[0];
+  graphics_queue_family_index = select_queue_family_with_flags(
+      &renderer->queue_families, physical_device, VK_QUEUE_GRAPHICS_BIT);
+  present_queue_family_index = select_queue_family_with_present_support(
+      &renderer->queue_families, physical_device, renderer->surface);
+  queue_families[0] = graphics_queue_family_index;
+  queue_families[1] = present_queue_family_index;
+  printf("graphics queue family index: %d\n", graphics_queue_family_index);
+  printf("present queue family index: %d\n", present_queue_family_index);
+
+  memset(&device_features, 0, sizeof(VkPhysicalDeviceFeatures));
+  create_logical_device(&renderer->logical_devices, &renderer->device_queues,
+      physical_device, queue_families[0] == queue_families[1] ? 1 : 2,
+      queue_families, sizeof(DEVICE_EXTENSIONS[0]) / sizeof(DEVICE_EXTENSIONS),
+      DEVICE_EXTENSIONS, device_features);
+  printf("queue count: %d\n", renderer->device_queues.count);
 }
 
 void
 destroy_renderer(struct lime_renderer *renderer)
 {
   PFN_vkDestroyDebugUtilsMessengerEXT debug_messenger_destroy_func;
+  destroy_queue_table(&renderer->device_queues);
+  destroy_logical_device_table(&renderer->logical_devices);
   destroy_queue_family_table(&renderer->queue_families);
   destroy_physical_device_table(&renderer->physical_devices);
   vkDestroySurfaceKHR(renderer->instance, renderer->surface, NULL);
