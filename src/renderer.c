@@ -140,6 +140,8 @@ create_renderer(struct lime_renderer *renderer, GLFWwindow* window)
   int graphics_queue_family_index, present_queue_family_index;
   int queue_families[2];
   VkPhysicalDeviceFeatures device_features;
+  VkDevice logical_device;
+  VkCommandPool graphics_pool;
 
   renderer->validation_layers_enabled = check_validation_layer_support();
   if(!renderer->validation_layers_enabled)
@@ -165,6 +167,7 @@ create_renderer(struct lime_renderer *renderer, GLFWwindow* window)
       &renderer->physical_devices, renderer->instance, renderer->surface);
   create_logical_device_table(&renderer->logical_devices);
   create_queue_table(&renderer->device_queues);
+  create_command_pool_table(&renderer->command_pools);
 
   if (renderer->physical_devices.count == 0) {
     fprintf(stderr, "no graphics cards with vulkan support found\n");
@@ -189,17 +192,23 @@ create_renderer(struct lime_renderer *renderer, GLFWwindow* window)
   printf("present queue family index: %d\n", present_queue_family_index);
 
   memset(&device_features, 0, sizeof(VkPhysicalDeviceFeatures));
-  create_logical_device(&renderer->logical_devices, &renderer->device_queues,
-      physical_device, queue_families[0] == queue_families[1] ? 1 : 2,
-      queue_families, sizeof(DEVICE_EXTENSIONS[0]) / sizeof(DEVICE_EXTENSIONS),
+  logical_device = create_logical_device(&renderer->logical_devices,
+      &renderer->device_queues, physical_device,
+      queue_families[0] == queue_families[1] ? 1 : 2, queue_families,
+      sizeof(DEVICE_EXTENSIONS[0]) / sizeof(DEVICE_EXTENSIONS),
       DEVICE_EXTENSIONS, device_features);
   printf("queue count: %d\n", renderer->device_queues.count);
+
+  create_command_pool(&renderer->command_pools, logical_device,
+      graphics_queue_family_index,
+      VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 }
 
 void
 destroy_renderer(struct lime_renderer *renderer)
 {
   PFN_vkDestroyDebugUtilsMessengerEXT debug_messenger_destroy_func;
+  destroy_command_pool_table(&renderer->command_pools);
   destroy_queue_table(&renderer->device_queues);
   destroy_logical_device_table(&renderer->logical_devices);
   destroy_queue_family_table(&renderer->queue_families);

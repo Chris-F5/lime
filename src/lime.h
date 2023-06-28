@@ -9,11 +9,6 @@ struct lime_render_queue_table {
   VkQueue *queue;
 };
 
-struct lime_command_pool_table {
-  int count, allocated;
-  VkCommandPool *command_pool;
-};
-
 struct lime_device_table {
   int count, allocated;
   VkDevice *logical_device;
@@ -85,6 +80,13 @@ struct lime_queue_table {
   VkQueue *queue;
 };
 
+struct lime_command_pool_table {
+  int count, allocated;
+  VkCommandPool *command_pool;
+  VkDevice *logical_device;
+  int *family_index;
+};
+
 struct lime_renderer {
   int validation_layers_enabled;
   VkInstance instance;
@@ -99,6 +101,7 @@ struct lime_renderer {
   struct lime_queue_family_table queue_families;
   struct lime_logical_device_table logical_devices;
   struct lime_queue_table device_queues;
+  struct lime_command_pool_table command_pools;
 };
 
 /* utils.c */
@@ -131,7 +134,12 @@ void create_logical_device_table(struct lime_logical_device_table *table);
 void destroy_logical_device_table(struct lime_logical_device_table *table);
 void create_queue_table(struct lime_queue_table *table);
 void destroy_queue_table(struct lime_queue_table *table);
-void create_logical_device(struct lime_logical_device_table *logical_device_table,
+void create_command_pool_table(struct lime_command_pool_table *table);
+void destroy_command_pool_table(struct lime_command_pool_table *table);
+VkDevice create_logical_device(
+    struct lime_logical_device_table *logical_device_table,
     struct lime_queue_table *queue_table, VkPhysicalDevice physical_device,
     int queue_family_count, const int *queue_families, int extension_count,
     const char * const* extension_names, VkPhysicalDeviceFeatures features);
+void create_command_pool(struct lime_command_pool_table *table,
+    VkDevice logical_device, int family_index, VkCommandPoolCreateFlags flags);

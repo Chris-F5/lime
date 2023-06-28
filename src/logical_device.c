@@ -8,6 +8,8 @@ static void allocate_logical_device_table_records(
     struct lime_logical_device_table *table, int required);
 static void allocate_queue_table_records(struct lime_queue_table *table,
     int required);
+static void allocate_command_pool_table_records(
+    struct lime_command_pool_table *table, int required);
 
 static void
 allocate_logical_device_table_records(struct lime_logical_device_table *table,
@@ -34,6 +36,21 @@ allocate_queue_table_records(struct lime_queue_table *table, int required)
     table->queue_index = xrealloc(table->queue_index,
         table->allocated * sizeof(int));
     table->queue = xrealloc(table->queue, table->allocated * sizeof(VkQueue));
+  }
+}
+
+static void
+allocate_command_pool_table_records(struct lime_command_pool_table *table,
+    int required)
+{
+  if (required > table->allocated) {
+    table->allocated = required;
+    table->command_pool = xrealloc(table->command_pool,
+        table->allocated * sizeof(VkCommandPool));
+    table->logical_device = xrealloc(table->logical_device,
+        table->allocated * sizeof(VkDevice));
+    table->family_index = xrealloc(table->family_index,
+        table->allocated * sizeof(int));
   }
 }
 
@@ -79,6 +96,28 @@ destroy_queue_table(struct lime_queue_table *table)
 }
 
 void
+create_command_pool_table(struct lime_command_pool_table *table)
+{
+  table->count = 0;
+  table->allocated = 0;
+  table->command_pool = NULL;
+  table->logical_device = NULL;
+  table->family_index = NULL;
+  allocate_command_pool_table_records(table, 4);
+}
+
+void
+destroy_command_pool_table(struct lime_command_pool_table *table)
+{
+  int i;
+  for (i = 0; i < table->count; i++)
+    vkDestroyCommandPool(table->logical_device[i], table->command_pool[i], NULL);
+  free(table->command_pool);
+  free(table->logical_device);
+  free(table->family_index);
+}
+
+VkDevice
 create_logical_device(struct lime_logical_device_table *logical_device_table,
     struct lime_queue_table *queue_table, VkPhysicalDevice physical_device,
     int queue_family_count, const int *queue_families, int extension_count,
@@ -134,4 +173,31 @@ create_logical_device(struct lime_logical_device_table *logical_device_table,
     vkGetDeviceQueue(logical_device, queue_families[i], 0,
         &queue_table->queue[queue_table_index]);
   }
+  return logical_device;
+}
+
+void
+create_command_pool(struct lime_command_pool_table *table,
+    VkDevice logical_device, int family_index, VkCommandPoolCreateFlags flags)
+{
+  VkCommandPoolCreateInfo create_info;
+  int index;
+  VkResult err;
+
+  create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  create_info.pNext = NULL;
+  create_info.flags = flags;
+  create_info.queueFamilyIndex = family_index;
+
+  allocate_command_pool_table_records(table, table->count + 1);
+  index = table->count++;
+
+  err = vkCreateCommandPool(logical_device, &create_info, NULL,
+      &table->command_pool[index]);
+  if(err != VK_SUCCESS) {
+    PRINT_VK_ERROR(err, "creating command pool");
+    exit(1);
+  }
+  table->logical_device[index] = logical_device;
+  table->family_index[index] = family_index;
 }
