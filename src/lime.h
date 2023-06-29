@@ -4,27 +4,6 @@
   }
 
 /*
-struct lime_render_queue_table {
-  int count, allocated;
-  VkQueue *queue;
-};
-
-struct lime_device_table {
-  int count, allocated;
-  VkDevice *logical_device;
-};
-
-struct lime_swapchain_table {
-  int count, allocated;
-  int *device_id;
-  VkSwapchainKHR *swapchain;
-  VkExtent2D *extent;
-  VkFormat *format;
-  uint32_t *image_count;
-  VkImage **images;
-  VkImageView **image_views;
-};
-
 struct lime_render_pass_table {
   int count, allocated;
   int *device_id;
@@ -56,7 +35,6 @@ struct lime_physical_device_table {
   int count;
   VkPhysicalDevice *physical_device;
   VkPhysicalDeviceProperties *properties;
-  VkSurfaceCapabilitiesKHR *surface_capabilities;
 };
 
 struct lime_queue_family_table {
@@ -87,21 +65,34 @@ struct lime_command_pool_table {
   int *family_index;
 };
 
+struct lime_swapchain_image_table {
+  int count, allocated;
+  VkImage *image;
+  VkImageView *image_view;
+  VkSwapchainKHR *swapchain;
+};
+
+struct lime_swapchain_table {
+  int count, allocated;
+  VkSwapchainKHR *swapchain;
+  VkDevice *logical_device;
+  VkSurfaceFormatKHR *surface_format;
+  VkExtent2D *extent;
+};
+
 struct lime_renderer {
   int validation_layers_enabled;
   VkInstance instance;
   VkDebugUtilsMessengerEXT debug_messenger;
   VkSurfaceKHR surface;
 
-  VkSurfaceFormatKHR surface_format;
-  VkPresentModeKHR present_mode;
-  VkFormat depth_image_format;
-
   struct lime_physical_device_table physical_devices;
   struct lime_queue_family_table queue_families;
   struct lime_logical_device_table logical_devices;
   struct lime_queue_table device_queues;
   struct lime_command_pool_table command_pools;
+  struct lime_swapchain_table swapchains;
+  struct lime_swapchain_image_table swapchain_images;
 };
 
 /* utils.c */
@@ -141,5 +132,25 @@ VkDevice create_logical_device(
     struct lime_queue_table *queue_table, VkPhysicalDevice physical_device,
     int queue_family_count, const int *queue_families, int extension_count,
     const char * const* extension_names, VkPhysicalDeviceFeatures features);
+int get_logical_device_table_index(const struct lime_logical_device_table *table,
+    VkDevice logical_device);
 void create_command_pool(struct lime_command_pool_table *table,
     VkDevice logical_device, int family_index, VkCommandPoolCreateFlags flags);
+
+/* swapchain.c */
+void create_swapchain_table(struct lime_swapchain_table *table);
+void destroy_swapchain_table(struct lime_swapchain_table *swapchain_table);
+void create_swapchain_image_table(struct lime_swapchain_image_table *table);
+void destroy_swapchain_image_table(
+    struct lime_swapchain_image_table *swapchain_image_table,
+    const struct lime_swapchain_table *swapchain_table);
+int find_swapchain_table_index(const struct lime_swapchain_table *table,
+    VkSwapchainKHR swapchain);
+void create_swapchain(struct lime_swapchain_table *swapchain_table,
+    struct lime_swapchain_image_table *image_table,
+    VkPhysicalDevice physical_device, VkSurfaceKHR surface,
+    VkDevice logical_device, VkSwapchainCreateFlagsKHR flags,
+    VkSurfaceFormatKHR surface_format, VkImageUsageFlags usage_flags,
+    VkPresentModeKHR present_mode, int queue_family_count,
+    const uint32_t *queue_family_indices, VkBool32 clipped,
+    VkCompositeAlphaFlagBitsKHR composite_alpha);

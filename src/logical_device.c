@@ -176,6 +176,17 @@ create_logical_device(struct lime_logical_device_table *logical_device_table,
   return logical_device;
 }
 
+int
+get_logical_device_table_index(const struct lime_logical_device_table *table,
+    VkDevice logical_device)
+{
+  int i;
+  for (i = 0; i < table->count; i++)
+    if (table->logical_device[i] == logical_device)
+      return i;
+  return -1;
+}
+
 void
 create_command_pool(struct lime_command_pool_table *table,
     VkDevice logical_device, int family_index, VkCommandPoolCreateFlags flags)

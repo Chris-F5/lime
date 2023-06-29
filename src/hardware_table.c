@@ -54,22 +54,14 @@ create_physical_device_table(struct lime_physical_device_table *table,
   }
   table->physical_device = xmalloc(table->count * sizeof(VkPhysicalDevice));
   table->properties = xmalloc(table->count * sizeof(VkPhysicalDeviceProperties));
-  table->surface_capabilities = xmalloc(table->count * sizeof(VkSurfaceCapabilitiesKHR));
   err = vkEnumeratePhysicalDevices(instance, &table->count,
       table->physical_device);
   if (err != VK_SUCCESS) {
     PRINT_VK_ERROR(err, "enumerating physical devices");
     exit(1);
   }
-  for (i = 0; i < table->count; i++) {
+  for (i = 0; i < table->count; i++)
     vkGetPhysicalDeviceProperties(table->physical_device[i], &table->properties[i]);
-    err = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(table->physical_device[i],
-        surface, &table->surface_capabilities[i]);
-    if (err != VK_SUCCESS) {
-      PRINT_VK_ERROR(err, "getting physical device surface capabilities");
-      exit(1);
-    }
-  }
 }
 
 void
@@ -77,7 +69,6 @@ destroy_physical_device_table(struct lime_physical_device_table *table)
 {
   free(table->physical_device);
   free(table->properties);
-  free(table->surface_capabilities);
 }
 
 void

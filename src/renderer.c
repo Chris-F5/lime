@@ -138,10 +138,11 @@ create_renderer(struct lime_renderer *renderer, GLFWwindow* window)
   VkResult err;
   VkPhysicalDevice physical_device;
   int graphics_queue_family_index, present_queue_family_index;
-  int queue_families[2];
+  uint32_t queue_families[2];
   VkPhysicalDeviceFeatures device_features;
   VkDevice logical_device;
   VkCommandPool graphics_pool;
+  VkSurfaceFormatKHR surface_format;
 
   renderer->validation_layers_enabled = check_validation_layer_support();
   if(!renderer->validation_layers_enabled)
@@ -156,10 +157,6 @@ create_renderer(struct lime_renderer *renderer, GLFWwindow* window)
     PRINT_VK_ERROR(err, "creating window surface");
     exit(1);
   }
-  renderer->surface_format.format = VK_FORMAT_B8G8R8A8_UNORM;
-  renderer->surface_format.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
-  renderer->present_mode = VK_PRESENT_MODE_FIFO_KHR;
-  renderer->depth_image_format = VK_FORMAT_D32_SFLOAT;
 
   create_physical_device_table(&renderer->physical_devices, renderer->instance,
       renderer->surface);
@@ -168,6 +165,8 @@ create_renderer(struct lime_renderer *renderer, GLFWwindow* window)
   create_logical_device_table(&renderer->logical_devices);
   create_queue_table(&renderer->device_queues);
   create_command_pool_table(&renderer->command_pools);
+  create_swapchain_table(&renderer->swapchains);
+  create_swapchain_image_table(&renderer->swapchain_images);
 
   if (renderer->physical_devices.count == 0) {
     fprintf(stderr, "no graphics cards with vulkan support found\n");
@@ -202,12 +201,25 @@ create_renderer(struct lime_renderer *renderer, GLFWwindow* window)
   create_command_pool(&renderer->command_pools, logical_device,
       graphics_queue_family_index,
       VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+
+  surface_format.format = VK_FORMAT_B8G8R8A8_UNORM;
+  surface_format.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+  /* TODO: check present mode supported */
+  create_swapchain(&renderer->swapchains, &renderer->swapchain_images,
+      physical_device, renderer->surface, logical_device,
+      0, surface_format, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+      VK_PRESENT_MODE_FIFO_KHR,
+      queue_families[0] == queue_families[1] ? 1 : 2, queue_families, VK_TRUE,
+      VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR);
+  printf("swapchain image count: %d\n", renderer->swapchain_images.count);
 }
 
 void
 destroy_renderer(struct lime_renderer *renderer)
 {
   PFN_vkDestroyDebugUtilsMessengerEXT debug_messenger_destroy_func;
+  destroy_swapchain_image_table(&renderer->swapchain_images, &renderer->swapchains);
+  destroy_swapchain_table(&renderer->swapchains);
   destroy_command_pool_table(&renderer->command_pools);
   destroy_queue_table(&renderer->device_queues);
   destroy_logical_device_table(&renderer->logical_devices);
