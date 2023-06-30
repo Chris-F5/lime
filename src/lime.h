@@ -17,13 +17,6 @@ struct lime_render_pipeline_table {
   VkPipeline *pipeline;
 };
 
-struct lime_shader_module_table {
-  int count, allocated;
-  const char *fname;
-  int *device_id;
-  VkShaderModule *shader_module;
-};
-
 struct lime_command_buffer_table {
   int count, allocated;
   int *device_id;
@@ -80,6 +73,13 @@ struct lime_swapchain_table {
   VkExtent2D *extent;
 };
 
+struct lime_shader_module_table {
+  int count, allocated;
+  VkShaderModule *shader_module;
+  VkDevice *logical_device;
+  const char **file_name;
+};
+
 struct lime_renderer {
   int validation_layers_enabled;
   VkInstance instance;
@@ -93,6 +93,7 @@ struct lime_renderer {
   struct lime_command_pool_table command_pools;
   struct lime_swapchain_table swapchains;
   struct lime_swapchain_image_table swapchain_images;
+  struct lime_shader_module_table shader_modules;
 };
 
 /* utils.c */
@@ -154,3 +155,9 @@ void create_swapchain(struct lime_swapchain_table *swapchain_table,
     VkPresentModeKHR present_mode, int queue_family_count,
     const uint32_t *queue_family_indices, VkBool32 clipped,
     VkCompositeAlphaFlagBitsKHR composite_alpha);
+
+/* shader_module.c */
+void create_shader_module_table(struct lime_shader_module_table *table);
+void destroy_shader_module_table(struct lime_shader_module_table *table);
+VkShaderModule create_shader_module(struct lime_shader_module_table *table,
+    VkDevice logical_device, const char *file_name);

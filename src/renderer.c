@@ -143,6 +143,7 @@ create_renderer(struct lime_renderer *renderer, GLFWwindow* window)
   VkDevice logical_device;
   VkCommandPool graphics_pool;
   VkSurfaceFormatKHR surface_format;
+  VkShaderModule vertex_module, fragment_module;
 
   renderer->validation_layers_enabled = check_validation_layer_support();
   if(!renderer->validation_layers_enabled)
@@ -167,6 +168,7 @@ create_renderer(struct lime_renderer *renderer, GLFWwindow* window)
   create_command_pool_table(&renderer->command_pools);
   create_swapchain_table(&renderer->swapchains);
   create_swapchain_image_table(&renderer->swapchain_images);
+  create_shader_module_table(&renderer->shader_modules);
 
   if (renderer->physical_devices.count == 0) {
     fprintf(stderr, "no graphics cards with vulkan support found\n");
@@ -212,12 +214,19 @@ create_renderer(struct lime_renderer *renderer, GLFWwindow* window)
       queue_families[0] == queue_families[1] ? 1 : 2, queue_families, VK_TRUE,
       VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR);
   printf("swapchain image count: %d\n", renderer->swapchain_images.count);
+
+  vertex_module = create_shader_module(&renderer->shader_modules, logical_device,
+      "hello.vert.spv");
+  fragment_module = create_shader_module(&renderer->shader_modules, logical_device,
+      "hello.frag.spv");
+  printf("shader module count: %d\n", renderer->shader_modules.count);
 }
 
 void
 destroy_renderer(struct lime_renderer *renderer)
 {
   PFN_vkDestroyDebugUtilsMessengerEXT debug_messenger_destroy_func;
+  destroy_shader_module_table(&renderer->shader_modules);
   destroy_swapchain_image_table(&renderer->swapchain_images, &renderer->swapchains);
   destroy_swapchain_table(&renderer->swapchains);
   destroy_command_pool_table(&renderer->command_pools);
