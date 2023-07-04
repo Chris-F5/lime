@@ -7,6 +7,18 @@
 
 static const char *VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation";
 
+static int check_validation_layer_support(void);
+static VKAPI_ATTR VkBool32 VKAPI_CALL validation_layer_callback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+    VkDebugUtilsMessageTypeFlagsEXT type,
+    const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
+    void* user_data);
+static void create_debug_messenger(VkInstance instance, VkDebugUtilsMessengerEXT *debug_messenger);
+static void add_rules(struct renderer *renderer);
+static void instance_rule_func(const struct tuple *state,
+    const struct instance_rule *rule, struct instance_state *output);
+static void dispatch(struct renderer *renderer);
+
 static int
 check_validation_layer_support(void)
 {
@@ -37,58 +49,6 @@ check_validation_layer_support(void)
   return 0;
 }
 
-static void
-create_vulkan_instance(VkInstance *instance, int validation_layers_enabled)
-{
-  int glfw_extension_count, extension_count;
-  const char **glfw_extensions, **extensions;
-  VkApplicationInfo app_info;
-  VkInstanceCreateInfo create_info;
-  VkResult err;
-
-  glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
-  if (validation_layers_enabled) {
-    extension_count = glfw_extension_count + 1;
-    extensions = xmalloc(extension_count * sizeof(char *));
-    memcpy(extensions, glfw_extensions, glfw_extension_count * sizeof(char *));
-    extensions[glfw_extension_count] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
-  } else {
-    extension_count = glfw_extension_count;
-    extensions = glfw_extensions;
-  }
-
-  app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-  app_info.pNext = NULL;
-  app_info.pApplicationName = "demo_renderer";
-  app_info.applicationVersion = VK_MAKE_VERSION(0, 0, 1);
-  app_info.pEngineName = "lime";
-  app_info.engineVersion = VK_MAKE_VERSION(0, 0, 1);
-  app_info.apiVersion = VK_API_VERSION_1_0;
-
-  create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-  create_info.pNext = NULL;
-  create_info.flags = 0;
-  create_info.pApplicationInfo = &app_info;
-  create_info.enabledExtensionCount = extension_count;
-  create_info.ppEnabledExtensionNames = extensions;
-  if (validation_layers_enabled) {
-    create_info.enabledLayerCount = 1;
-    create_info.ppEnabledLayerNames = &VALIDATION_LAYER;
-  } else {
-    create_info.enabledLayerCount = 0;
-    create_info.ppEnabledLayerNames = NULL;
-  }
-
-  err = vkCreateInstance(&create_info, NULL, instance);
-  if (err != VK_SUCCESS) {
-    PRINT_VK_ERROR(err, "creating instance");
-    exit(1);
-  }
-
-  if (extensions != glfw_extensions)
-    free(extensions);
-}
-
 static VKAPI_ATTR VkBool32 VKAPI_CALL validation_layer_callback(
     VkDebugUtilsMessageSeverityFlagBitsEXT severity,
     VkDebugUtilsMessageTypeFlagsEXT type,
@@ -99,7 +59,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL validation_layer_callback(
     return VK_FALSE;
 }
 
-void
+static void
 create_debug_messenger(VkInstance instance, VkDebugUtilsMessengerEXT *debug_messenger)
 {
   VkDebugUtilsMessengerCreateInfoEXT create_info;
@@ -129,34 +89,130 @@ create_debug_messenger(VkInstance instance, VkDebugUtilsMessengerEXT *debug_mess
   create_func(instance, &create_info, NULL, debug_messenger);
 }
 
-void
-create_renderer(struct lime_renderer *renderer, GLFWwindow* window)
+static void
+add_rules(struct renderer *renderer)
 {
+  int instance;
+  {
+    struct instance_rule *rule;
+    instance = tuple_add(&renderer->rules, sizeof(struct instance_rule));
+    tuple_add(&renderer->state, sizeof(struct instance_state));
+    rule = tuple_get(&renderer->rules, instance);
+    rule->type = RULE_TYPE_INSTANCE;
+    rule->validation_layers_enabled = check_validation_layer_support();
+    if (rule->validation_layers_enabled)
+      printf("validation layers enabled\n");
+    else
+      printf("validation layers dissabled\n");
+  }
+}
+
+static void
+instance_rule_func(const struct tuple *state, const struct instance_rule *rule,
+    struct instance_state *output)
+{
+  int glfw_extension_count, extension_count;
+  const char **glfw_extensions, **extensions;
+  VkApplicationInfo app_info;
+  VkInstanceCreateInfo create_info;
   VkResult err;
-  renderer->validation_layers_enabled = check_validation_layer_support();
-  if(!renderer->validation_layers_enabled)
-    fprintf(stderr, "validation layers are not supported\n");
-  create_vulkan_instance(&renderer->instance, renderer->validation_layers_enabled);
-  if (renderer->validation_layers_enabled)
-    create_debug_messenger(renderer->instance, &renderer->debug_messenger);
-  else
-    renderer->debug_messenger = VK_NULL_HANDLE;
-  err = glfwCreateWindowSurface(renderer->instance, window, NULL, &renderer->surface);
+
+  glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
+  if (rule->validation_layers_enabled) {
+    extension_count = glfw_extension_count + 1;
+    extensions = xmalloc(extension_count * sizeof(char *));
+    memcpy(extensions, glfw_extensions, glfw_extension_count * sizeof(char *));
+    extensions[glfw_extension_count] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
+  } else {
+    extension_count = glfw_extension_count;
+    extensions = glfw_extensions;
+  }
+
+  app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
+  app_info.pNext = NULL;
+  app_info.pApplicationName = "demo_renderer";
+  app_info.applicationVersion = VK_MAKE_VERSION(0, 0, 1);
+  app_info.pEngineName = "lime";
+  app_info.engineVersion = VK_MAKE_VERSION(0, 0, 1);
+  app_info.apiVersion = VK_API_VERSION_1_0;
+
+  create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
+  create_info.pNext = NULL;
+  create_info.flags = 0;
+  create_info.pApplicationInfo = &app_info;
+  create_info.enabledExtensionCount = extension_count;
+  create_info.ppEnabledExtensionNames = extensions;
+  if (rule->validation_layers_enabled) {
+    create_info.enabledLayerCount = 1;
+    create_info.ppEnabledLayerNames = &VALIDATION_LAYER;
+  } else {
+    create_info.enabledLayerCount = 0;
+    create_info.ppEnabledLayerNames = NULL;
+  }
+
+  err = vkCreateInstance(&create_info, NULL, &output->instance);
   if (err != VK_SUCCESS) {
-    PRINT_VK_ERROR(err, "creating window surface");
+    PRINT_VK_ERROR(err, "creating instance");
     exit(1);
+  }
+
+  if (extensions != glfw_extensions)
+    free(extensions);
+}
+
+static void
+dispatch(struct renderer *renderer)
+{
+  int i;
+  struct rule *rule;
+  void *state;
+  for (i = 0; i < renderer->rules.element_count; i++) {
+    rule = tuple_get(&renderer->rules, i);
+    state = tuple_get(&renderer->state, i);
+    switch(rule->type) {
+    case RULE_TYPE_INSTANCE:
+      instance_rule_func(&renderer->state, (struct instance_rule *)rule, state);
+      break;
+    default:
+      fprintf(stderr, "unrecognised rule type (%d)\n", rule->type);
+      exit(1);
+    }
+  }
+}
+
+static void
+destroy_state(struct renderer *renderer)
+{
+  int i;
+  struct rule *rule;
+  void *state;
+  for (i = renderer->rules.element_count - 1; i >= 0; i--) {
+    rule = tuple_get(&renderer->rules, i);
+    state = tuple_get(&renderer->state, i);
+    switch(rule->type) {
+    case RULE_TYPE_INSTANCE:
+      vkDestroyInstance(((struct instance_state *)state)->instance, NULL);
+      break;
+    default:
+      fprintf(stderr, "unrecognised rule type (%d)\n", rule->type);
+      exit(1);
+    }
   }
 }
 
 void
-destroy_renderer(struct lime_renderer *renderer)
+create_renderer(struct renderer *renderer, GLFWwindow* window)
 {
-  PFN_vkDestroyDebugUtilsMessengerEXT debug_messenger_destroy_func;
-  vkDestroySurfaceKHR(renderer->instance, renderer->surface, NULL);
-  debug_messenger_destroy_func = (PFN_vkDestroyDebugUtilsMessengerEXT)
-    vkGetInstanceProcAddr(renderer->instance,"vkDestroyDebugUtilsMessengerEXT");
-  if (debug_messenger_destroy_func != NULL)
-    debug_messenger_destroy_func(renderer->instance, renderer->debug_messenger,
-        NULL);
-  vkDestroyInstance(renderer->instance, NULL);
+  tuple_init(&renderer->rules, 8 * 1024, 64);
+  tuple_init(&renderer->state, 8 * 1024, 64);
+  add_rules(renderer);
+  dispatch(renderer);
+}
+
+void
+destroy_renderer(struct renderer *renderer)
+{
+  destroy_state(renderer);
+  tuple_free(&renderer->rules);
+  tuple_free(&renderer->state);
 }

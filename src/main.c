@@ -22,7 +22,7 @@ main(int argc, char **argv)
   GLFWwindow *window;
   VkSurfaceKHR surface;
   VkResult err;
-  struct lime_renderer renderer;
+  struct renderer renderer;
 
   glfwSetErrorCallback(glfw_error_callback);
   glfwInit();
