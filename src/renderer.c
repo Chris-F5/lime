@@ -6,12 +6,13 @@
 #include <GLFW/glfw3.h>
 #include "lime.h"
 
-static void add_rules(struct renderer *renderer);
-static void dispatch(struct renderer *renderer);
-static int get_dependency_count(const struct renderer *renderer, int rule);
+static void configure_rules(struct renderer *renderer);
+static void dispatch_rules(struct renderer *renderer);
+static void destroy_state(struct renderer *renderer);
+static int get_rule_dependency_count(const struct renderer *renderer, int rule);
 
 static void
-add_rules(struct renderer *renderer)
+configure_rules(struct renderer *renderer)
 {
   int instance, physical_device;
   instance = add_instance_rule(renderer);
@@ -20,21 +21,20 @@ add_rules(struct renderer *renderer)
 
 
 static void
-dispatch(struct renderer *renderer)
+dispatch_rules(struct renderer *renderer)
 {
-  int i;
-  struct rule *rule;
-  for (i = 0; i < renderer->rule_count; i++) {
-    rule = get_rule(renderer, i);
-    switch(rule->type) {
+  int rule, type;
+  for (rule = 0; rule < renderer->rule_count; rule++) {
+    type = renderer->rule_types[rule];
+    switch(type) {
     case RULE_TYPE_INSTANCE:
-      dispatch_instance_rule(renderer, i);
+      dispatch_instance_rule(renderer, rule);
       break;
     case RULE_TYPE_PHYSICAL_DEVICE:
-      dispatch_physical_device_rule(renderer, i);
+      dispatch_physical_device_rule(renderer, rule);
       break;
     default:
-      fprintf(stderr, "unrecognised rule type (%d)\n", rule->type);
+      fprintf(stderr, "unrecognised rule type (%d)\n", type);
       exit(1);
     }
   }
@@ -43,28 +43,25 @@ dispatch(struct renderer *renderer)
 static void
 destroy_state(struct renderer *renderer)
 {
-  int i;
-  struct rule *rule;
-  void *state;
-  for (i = renderer->rule_count - 1; i >= 0; i--) {
-    rule = get_rule(renderer, i);
-    state = get_state(renderer, i);
-    switch(rule->type) {
+  int rule, type;
+  for (rule = renderer->rule_count - 1; rule >= 0; rule--) {
+    type = renderer->rule_types[rule];
+    switch(type) {
     case RULE_TYPE_INSTANCE:
-      destroy_instance(renderer, i);
+      destroy_instance_state(renderer, rule);
       break;
     case RULE_TYPE_PHYSICAL_DEVICE:
-      destroy_physical_device(renderer, i);
+      destroy_physical_device_state(renderer, rule);
       break;
     default:
-      fprintf(stderr, "unrecognised rule type (%d)\n", rule->type);
+      fprintf(stderr, "unrecognised rule type (%d)\n", type);
       exit(1);
     }
   }
 }
 
 static int
-get_dependency_count(const struct renderer *renderer, int rule)
+get_rule_dependency_count(const struct renderer *renderer, int rule)
 {
   assert(rule >= 0);
   assert(rule < renderer->rule_count);
@@ -76,24 +73,26 @@ get_dependency_count(const struct renderer *renderer, int rule)
 }
 
 int
-add_rule(struct renderer *renderer, size_t rule_size, size_t state_size)
+add_rule(struct renderer *renderer, int type, size_t conf_size, size_t state_size)
 {
-  int index;
-  index = renderer->rule_count++;
+  int rule;
+  rule = renderer->rule_count++;
   if (renderer->rule_count > renderer->rules_allocated) {
     renderer->rules_allocated += 64;
-    renderer->rule_offsets = xrealloc(renderer->rule_offsets,
+    renderer->rule_types = xrealloc(renderer->rule_types,
+        renderer->rules_allocated * sizeof(int));
+    renderer->conf_offsets = xrealloc(renderer->conf_offsets,
         renderer->rules_allocated * sizeof(long));
     renderer->state_offsets = xrealloc(renderer->state_offsets,
         renderer->rules_allocated * sizeof(long));
     renderer->dependency_offsets = xrealloc(renderer->dependency_offsets,
-        renderer->rules_allocated * sizeof(long));
+        renderer->rules_allocated * sizeof(int));
   }
-  if (renderer->next_rule_offset + rule_size > renderer->rule_memory_allocated) {
-    renderer->rule_memory_allocated
-      = renderer->next_rule_offset + rule_size + 1024 * 4;
-    renderer->rule_memory = xrealloc(renderer->rule_memory,
-        renderer->rule_memory_allocated);
+  if (renderer->next_conf_offset + conf_size > renderer->conf_memory_allocated) {
+    renderer->conf_memory_allocated
+      = renderer->next_conf_offset + conf_size + 1024 * 4;
+    renderer->conf_memory = xrealloc(renderer->conf_memory,
+        renderer->conf_memory_allocated);
   }
   if (renderer->next_state_offset + state_size > renderer->state_memory_allocated) {
     renderer->state_memory_allocated
@@ -101,26 +100,27 @@ add_rule(struct renderer *renderer, size_t rule_size, size_t state_size)
     renderer->state_memory = xrealloc(renderer->state_memory,
         renderer->state_memory_allocated);
   }
-  renderer->rule_offsets[index] = renderer->next_rule_offset;
-  renderer->next_rule_offset += rule_size;
-  renderer->state_offsets[index] = renderer->next_state_offset;
+  renderer->rule_types[rule] = type;
+  renderer->conf_offsets[rule] = renderer->next_conf_offset;
+  renderer->next_conf_offset += conf_size;
+  renderer->state_offsets[rule] = renderer->next_state_offset;
   renderer->next_state_offset += state_size;
-  renderer->dependency_offsets[index] = renderer->next_dependency_offset;
-  return index;
+  renderer->dependency_offsets[rule] = renderer->next_dependency_offset;
+  return rule;
 }
 
 void *
-get_rule(const struct renderer *renderer, int rule)
+get_rule_conf(const struct renderer *renderer, int rule)
 {
   if (rule < 0 || rule >= renderer->rule_count) {
     fprintf(stderr, "rule out of range (%d)\n", rule);
     exit(1);
   }
-  return renderer->rule_memory + renderer->rule_offsets[rule];
+  return renderer->conf_memory + renderer->conf_offsets[rule];
 }
 
 void *
-get_state(const struct renderer *renderer, int rule)
+get_rule_state(const struct renderer *renderer, int rule)
 {
   if (rule < 0 || rule >= renderer->rule_count) {
     fprintf(stderr, "rule out of range (%d)\n", rule);
@@ -130,23 +130,35 @@ get_state(const struct renderer *renderer, int rule)
 }
 
 void *
-get_dependency(struct renderer *renderer, int rule, int n)
+get_rule_dependency_state(const struct renderer *renderer, int rule,
+    int dependency_index, int dependency_type)
 {
   int dependency_rule;
   if (rule < 0 || rule >= renderer->rule_count) {
     fprintf(stderr, "rule out of range (%d)\n", rule);
     exit(1);
   }
-  if (n < 0 || n > get_dependency_count(renderer, rule)) {
-    fprintf(stderr, "rule does not have dependency (%d)\n", n);
+  if (dependency_index < 0
+      || dependency_index > get_rule_dependency_count(renderer, rule)) {
+    fprintf(stderr, "rule does not have dependency (%d)\n", dependency_index);
     exit(1);
   }
-  dependency_rule = renderer->dependencies[renderer->dependency_offsets[rule] + n];
+  dependency_rule = renderer->dependencies[
+    renderer->dependency_offsets[rule] + dependency_index];
+  if (renderer->rule_types[dependency_rule] != dependency_type) {
+    fprintf(stderr, "unexpected dependency on rule type %d:\n\
+  dependency index %d\n\
+  expected type %d\n\
+  actual type %d\n",
+  renderer->rule_types[rule], dependency_index, dependency_type,
+  renderer->rule_types[dependency_rule]);
+    exit(1);
+  }
   return renderer->state_memory + renderer->state_offsets[dependency_rule];
 }
 
 void
-add_dependency(struct renderer *renderer, int d)
+add_rule_dependency(struct renderer *renderer, int d)
 {
   if (renderer->next_dependency_offset == renderer->dependencies_allocated) {
     renderer->dependencies_allocated += 128;
@@ -159,32 +171,34 @@ add_dependency(struct renderer *renderer, int d)
 void
 create_renderer(struct renderer *renderer, GLFWwindow* window)
 {
-  renderer->rule_count = 0;
   renderer->rules_allocated = 0;
-  renderer->rule_offsets = NULL;
-  renderer->state_offsets = NULL;
-  renderer->dependency_offsets = NULL;
-  renderer->next_rule_offset = 0;
-  renderer->next_state_offset = 0;
-  renderer->next_dependency_offset = 0;
-  renderer->rule_memory_allocated = 0;
+  renderer->rule_count = 0;
+  renderer->conf_memory_allocated = 0;
   renderer->state_memory_allocated = 0;
   renderer->dependencies_allocated = 0;
-  renderer->rule_memory = NULL;
+  renderer->next_conf_offset = 0;
+  renderer->next_state_offset = 0;
+  renderer->next_dependency_offset = 0;
+  renderer->rule_types = NULL;
+  renderer->conf_offsets = NULL;
+  renderer->state_offsets = NULL;
+  renderer->dependency_offsets = NULL;
+  renderer->conf_memory = NULL;
   renderer->state_memory = NULL;
   renderer->dependencies = NULL;
-  add_rules(renderer);
-  dispatch(renderer);
+  configure_rules(renderer);
+  dispatch_rules(renderer);
 }
 
 void
 destroy_renderer(struct renderer *renderer)
 {
   destroy_state(renderer);
-  free(renderer->rule_offsets);
+  free(renderer->rule_types);
+  free(renderer->conf_offsets);
   free(renderer->state_offsets);
   free(renderer->dependency_offsets);
-  free(renderer->rule_memory);
+  free(renderer->conf_memory);
   free(renderer->state_memory);
   free(renderer->dependencies);
 }

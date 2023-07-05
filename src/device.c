@@ -93,20 +93,19 @@ create_debug_messenger(VkInstance instance, VkDebugUtilsMessengerEXT *debug_mess
 int
 add_instance_rule(struct renderer *renderer)
 {
-  int index;
-  struct instance_rule *rule;
-  index = add_rule(renderer, sizeof(struct instance_rule),
+  int rule;
+  struct instance_conf *conf;
+  rule = add_rule(renderer, RULE_TYPE_INSTANCE, sizeof(struct instance_conf),
       sizeof(struct instance_state));
-  rule = get_rule(renderer, index);
-  rule->type = RULE_TYPE_INSTANCE;
-  rule->validation_layers_enabled = check_validation_layer_support();
-  return index;
+  conf = get_rule_conf(renderer, rule);
+  conf->validation_layers_enabled = check_validation_layer_support();
+  return rule;
 }
 
 void
-dispatch_instance_rule(struct renderer *renderer, int rule_index)
+dispatch_instance_rule(struct renderer *renderer, int rule)
 {
-  struct instance_rule *rule;
+  struct instance_conf *conf;
   struct instance_state *state;
   int glfw_extension_count, extension_count;
   const char **glfw_extensions, **extensions;
@@ -114,12 +113,12 @@ dispatch_instance_rule(struct renderer *renderer, int rule_index)
   VkInstanceCreateInfo create_info;
   VkResult err;
 
-  rule = get_rule(renderer, rule_index);
-  state = get_state(renderer, rule_index);
-  assert(rule->type == RULE_TYPE_INSTANCE);
+  assert(renderer->rule_types[rule] == RULE_TYPE_INSTANCE);
+  conf = get_rule_conf(renderer, rule);
+  state = get_rule_state(renderer, rule);
 
   glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
-  if (rule->validation_layers_enabled) {
+  if (conf->validation_layers_enabled) {
     extension_count = glfw_extension_count + 1;
     extensions = xmalloc(extension_count * sizeof(char *));
     memcpy(extensions, glfw_extensions, glfw_extension_count * sizeof(char *));
@@ -143,7 +142,7 @@ dispatch_instance_rule(struct renderer *renderer, int rule_index)
   create_info.pApplicationInfo = &app_info;
   create_info.enabledExtensionCount = extension_count;
   create_info.ppEnabledExtensionNames = extensions;
-  if (rule->validation_layers_enabled) {
+  if (conf->validation_layers_enabled) {
     create_info.enabledLayerCount = 1;
     create_info.ppEnabledLayerNames = &VALIDATION_LAYER;
   } else {
@@ -160,42 +159,41 @@ dispatch_instance_rule(struct renderer *renderer, int rule_index)
 }
 
 void
-destroy_instance(struct renderer *renderer, int rule_index)
+destroy_instance_state(struct renderer *renderer, int rule)
 {
   struct instance_state *state;
-  state = get_state(renderer, rule_index);
+  state = get_rule_state(renderer, rule);
   vkDestroyInstance(state->instance, NULL);
 }
 
 int
 add_physical_device_rule(struct renderer *renderer, int instance, const char *gpu_name)
 {
-  int index;
-  struct physical_device_rule *rule;
-  index = add_rule(renderer, sizeof(struct physical_device_rule),
-      sizeof(struct physical_device_state));
-  rule = get_rule(renderer, index);
-  rule->type = RULE_TYPE_PHYSICAL_DEVICE;
-  rule->gpu_name = gpu_name;
-  add_dependency(renderer, instance);
-  return index;
+  int rule;
+  struct physical_device_conf *conf;
+  rule = add_rule(renderer, RULE_TYPE_PHYSICAL_DEVICE,
+      sizeof(struct physical_device_conf), sizeof(struct physical_device_state));
+  conf = get_rule_conf(renderer, rule);
+  conf->gpu_name = gpu_name;
+  add_rule_dependency(renderer, instance);
+  return rule;
 }
 
 void
-dispatch_physical_device_rule(struct renderer *renderer, int rule_index)
+dispatch_physical_device_rule(struct renderer *renderer, int rule)
 {
-  struct physical_device_rule *rule;
+  struct physical_device_conf *conf;
   struct physical_device_state *state;
   struct instance_state *instance;
-  rule = get_rule(renderer, rule_index);
-  state = get_state(renderer, rule_index);
-  assert(rule->type == RULE_TYPE_PHYSICAL_DEVICE);
-  instance = get_dependency(renderer, rule_index, 0);
+  assert(renderer->rule_types[rule] == RULE_TYPE_PHYSICAL_DEVICE);
+  conf = get_rule_conf(renderer, rule);
+  state = get_rule_state(renderer, rule);
+  instance = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_INSTANCE);
 }
 
 void
-destroy_physical_device(struct renderer *renderer, int rule_index)
+destroy_physical_device_state(struct renderer *renderer, int rule)
 {
   struct physical_device_state *state;
-  state = get_state(renderer, rule_index);
+  state = get_rule_state(renderer, rule);
 }
