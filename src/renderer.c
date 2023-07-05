@@ -1,177 +1,37 @@
 #include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
+#include <assert.h>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 #include "lime.h"
 
-static const char *VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation";
-
-static int check_validation_layer_support(void);
-static VKAPI_ATTR VkBool32 VKAPI_CALL validation_layer_callback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-    VkDebugUtilsMessageTypeFlagsEXT type,
-    const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
-    void* user_data);
-static void create_debug_messenger(VkInstance instance, VkDebugUtilsMessengerEXT *debug_messenger);
 static void add_rules(struct renderer *renderer);
-static void instance_rule_func(const struct tuple *state,
-    const struct instance_rule *rule, struct instance_state *output);
 static void dispatch(struct renderer *renderer);
-
-static int
-check_validation_layer_support(void)
-{
-  VkResult err;
-  uint32_t available_layer_count;
-  VkLayerProperties *available_layers;
-  int i;
-
-  err = vkEnumerateInstanceLayerProperties(&available_layer_count, NULL);
-  if (err != VK_SUCCESS) {
-    PRINT_VK_ERROR(err, "enumerating instance layer properties");
-    exit(1);
-  }
-  available_layers = xmalloc(available_layer_count * sizeof(VkLayerProperties));
-  err = vkEnumerateInstanceLayerProperties(&available_layer_count, available_layers);
-  if (err != VK_SUCCESS) {
-    PRINT_VK_ERROR(err, "enumerating instance layer properties");
-    exit(1);
-  }
-
-  for (i = 0; i < available_layer_count; i++) {
-    if (strcmp(available_layers[i].layerName, VALIDATION_LAYER) == 0) {
-      free(available_layers);
-      return 1;
-    }
-  }
-  free(available_layers);
-  return 0;
-}
-
-static VKAPI_ATTR VkBool32 VKAPI_CALL validation_layer_callback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-    VkDebugUtilsMessageTypeFlagsEXT type,
-    const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
-    void* user_data)
-{
-    fprintf(stderr, "validation layer: %s\n", callback_data->pMessage);
-    return VK_FALSE;
-}
-
-static void
-create_debug_messenger(VkInstance instance, VkDebugUtilsMessengerEXT *debug_messenger)
-{
-  VkDebugUtilsMessengerCreateInfoEXT create_info;
-  PFN_vkCreateDebugUtilsMessengerEXT create_func;
-  VkResult err;
-
-  create_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-  create_info.pNext = NULL;
-  create_info.flags = 0;
-  create_info.messageSeverity
-    = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
-    | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
-    | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-  create_info.messageType
-    = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
-    | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
-    | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-  create_info.pfnUserCallback = validation_layer_callback;
-  create_info.pUserData = NULL;
-
-  create_func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
-    instance, "vkCreateDebugUtilsMessengerEXT");
-  if (create_func == NULL) {
-    PRINT_VK_ERROR(VK_ERROR_EXTENSION_NOT_PRESENT, "creating debug messenger");
-    exit(1);
-  }
-  create_func(instance, &create_info, NULL, debug_messenger);
-}
+static int get_dependency_count(const struct renderer *renderer, int rule);
 
 static void
 add_rules(struct renderer *renderer)
 {
-  int instance;
-  {
-    struct instance_rule *rule;
-    instance = tuple_add(&renderer->rules, sizeof(struct instance_rule));
-    tuple_add(&renderer->state, sizeof(struct instance_state));
-    rule = tuple_get(&renderer->rules, instance);
-    rule->type = RULE_TYPE_INSTANCE;
-    rule->validation_layers_enabled = check_validation_layer_support();
-    if (rule->validation_layers_enabled)
-      printf("validation layers enabled\n");
-    else
-      printf("validation layers dissabled\n");
-  }
+  int instance, physical_device;
+  instance = add_instance_rule(renderer);
+  physical_device = add_physical_device_rule(renderer, instance, "GPU NAME");
 }
 
-static void
-instance_rule_func(const struct tuple *state, const struct instance_rule *rule,
-    struct instance_state *output)
-{
-  int glfw_extension_count, extension_count;
-  const char **glfw_extensions, **extensions;
-  VkApplicationInfo app_info;
-  VkInstanceCreateInfo create_info;
-  VkResult err;
-
-  glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
-  if (rule->validation_layers_enabled) {
-    extension_count = glfw_extension_count + 1;
-    extensions = xmalloc(extension_count * sizeof(char *));
-    memcpy(extensions, glfw_extensions, glfw_extension_count * sizeof(char *));
-    extensions[glfw_extension_count] = VK_EXT_DEBUG_UTILS_EXTENSION_NAME;
-  } else {
-    extension_count = glfw_extension_count;
-    extensions = glfw_extensions;
-  }
-
-  app_info.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
-  app_info.pNext = NULL;
-  app_info.pApplicationName = "demo_renderer";
-  app_info.applicationVersion = VK_MAKE_VERSION(0, 0, 1);
-  app_info.pEngineName = "lime";
-  app_info.engineVersion = VK_MAKE_VERSION(0, 0, 1);
-  app_info.apiVersion = VK_API_VERSION_1_0;
-
-  create_info.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
-  create_info.pNext = NULL;
-  create_info.flags = 0;
-  create_info.pApplicationInfo = &app_info;
-  create_info.enabledExtensionCount = extension_count;
-  create_info.ppEnabledExtensionNames = extensions;
-  if (rule->validation_layers_enabled) {
-    create_info.enabledLayerCount = 1;
-    create_info.ppEnabledLayerNames = &VALIDATION_LAYER;
-  } else {
-    create_info.enabledLayerCount = 0;
-    create_info.ppEnabledLayerNames = NULL;
-  }
-
-  err = vkCreateInstance(&create_info, NULL, &output->instance);
-  if (err != VK_SUCCESS) {
-    PRINT_VK_ERROR(err, "creating instance");
-    exit(1);
-  }
-
-  if (extensions != glfw_extensions)
-    free(extensions);
-}
 
 static void
 dispatch(struct renderer *renderer)
 {
   int i;
   struct rule *rule;
-  void *state;
-  for (i = 0; i < renderer->rules.element_count; i++) {
-    rule = tuple_get(&renderer->rules, i);
-    state = tuple_get(&renderer->state, i);
+  for (i = 0; i < renderer->rule_count; i++) {
+    rule = get_rule(renderer, i);
     switch(rule->type) {
     case RULE_TYPE_INSTANCE:
-      instance_rule_func(&renderer->state, (struct instance_rule *)rule, state);
+      dispatch_instance_rule(renderer, i);
+      break;
+    case RULE_TYPE_PHYSICAL_DEVICE:
+      dispatch_physical_device_rule(renderer, i);
       break;
     default:
       fprintf(stderr, "unrecognised rule type (%d)\n", rule->type);
@@ -186,12 +46,15 @@ destroy_state(struct renderer *renderer)
   int i;
   struct rule *rule;
   void *state;
-  for (i = renderer->rules.element_count - 1; i >= 0; i--) {
-    rule = tuple_get(&renderer->rules, i);
-    state = tuple_get(&renderer->state, i);
+  for (i = renderer->rule_count - 1; i >= 0; i--) {
+    rule = get_rule(renderer, i);
+    state = get_state(renderer, i);
     switch(rule->type) {
     case RULE_TYPE_INSTANCE:
-      vkDestroyInstance(((struct instance_state *)state)->instance, NULL);
+      destroy_instance(renderer, i);
+      break;
+    case RULE_TYPE_PHYSICAL_DEVICE:
+      destroy_physical_device(renderer, i);
       break;
     default:
       fprintf(stderr, "unrecognised rule type (%d)\n", rule->type);
@@ -200,11 +63,116 @@ destroy_state(struct renderer *renderer)
   }
 }
 
+static int
+get_dependency_count(const struct renderer *renderer, int rule)
+{
+  assert(rule >= 0);
+  assert(rule < renderer->rule_count);
+  return (
+      rule == renderer->rule_count - 1
+      ? renderer->next_dependency_offset
+      : renderer->dependency_offsets[rule + 1]
+      ) - renderer->dependency_offsets[rule];
+}
+
+int
+add_rule(struct renderer *renderer, size_t rule_size, size_t state_size)
+{
+  int index;
+  index = renderer->rule_count++;
+  if (renderer->rule_count > renderer->rules_allocated) {
+    renderer->rules_allocated += 64;
+    renderer->rule_offsets = xrealloc(renderer->rule_offsets,
+        renderer->rules_allocated * sizeof(long));
+    renderer->state_offsets = xrealloc(renderer->state_offsets,
+        renderer->rules_allocated * sizeof(long));
+    renderer->dependency_offsets = xrealloc(renderer->dependency_offsets,
+        renderer->rules_allocated * sizeof(long));
+  }
+  if (renderer->next_rule_offset + rule_size > renderer->rule_memory_allocated) {
+    renderer->rule_memory_allocated
+      = renderer->next_rule_offset + rule_size + 1024 * 4;
+    renderer->rule_memory = xrealloc(renderer->rule_memory,
+        renderer->rule_memory_allocated);
+  }
+  if (renderer->next_state_offset + state_size > renderer->state_memory_allocated) {
+    renderer->state_memory_allocated
+      = renderer->next_state_offset + state_size + 1024 * 4;
+    renderer->state_memory = xrealloc(renderer->state_memory,
+        renderer->state_memory_allocated);
+  }
+  renderer->rule_offsets[index] = renderer->next_rule_offset;
+  renderer->next_rule_offset += rule_size;
+  renderer->state_offsets[index] = renderer->next_state_offset;
+  renderer->next_state_offset += state_size;
+  renderer->dependency_offsets[index] = renderer->next_dependency_offset;
+  return index;
+}
+
+void *
+get_rule(const struct renderer *renderer, int rule)
+{
+  if (rule < 0 || rule >= renderer->rule_count) {
+    fprintf(stderr, "rule out of range (%d)\n", rule);
+    exit(1);
+  }
+  return renderer->rule_memory + renderer->rule_offsets[rule];
+}
+
+void *
+get_state(const struct renderer *renderer, int rule)
+{
+  if (rule < 0 || rule >= renderer->rule_count) {
+    fprintf(stderr, "rule out of range (%d)\n", rule);
+    exit(1);
+  }
+  return renderer->state_memory + renderer->state_offsets[rule];
+}
+
+void *
+get_dependency(struct renderer *renderer, int rule, int n)
+{
+  int dependency_rule;
+  if (rule < 0 || rule >= renderer->rule_count) {
+    fprintf(stderr, "rule out of range (%d)\n", rule);
+    exit(1);
+  }
+  if (n < 0 || n > get_dependency_count(renderer, rule)) {
+    fprintf(stderr, "rule does not have dependency (%d)\n", n);
+    exit(1);
+  }
+  dependency_rule = renderer->dependencies[renderer->dependency_offsets[rule] + n];
+  return renderer->state_memory + renderer->state_offsets[dependency_rule];
+}
+
+void
+add_dependency(struct renderer *renderer, int d)
+{
+  if (renderer->next_dependency_offset == renderer->dependencies_allocated) {
+    renderer->dependencies_allocated += 128;
+    renderer->dependencies = xrealloc(renderer->dependencies,
+        renderer->dependencies_allocated * sizeof(int));
+  }
+  renderer->dependencies[renderer->next_dependency_offset++] = d;
+}
+
 void
 create_renderer(struct renderer *renderer, GLFWwindow* window)
 {
-  tuple_init(&renderer->rules, 8 * 1024, 64);
-  tuple_init(&renderer->state, 8 * 1024, 64);
+  renderer->rule_count = 0;
+  renderer->rules_allocated = 0;
+  renderer->rule_offsets = NULL;
+  renderer->state_offsets = NULL;
+  renderer->dependency_offsets = NULL;
+  renderer->next_rule_offset = 0;
+  renderer->next_state_offset = 0;
+  renderer->next_dependency_offset = 0;
+  renderer->rule_memory_allocated = 0;
+  renderer->state_memory_allocated = 0;
+  renderer->dependencies_allocated = 0;
+  renderer->rule_memory = NULL;
+  renderer->state_memory = NULL;
+  renderer->dependencies = NULL;
   add_rules(renderer);
   dispatch(renderer);
 }
@@ -213,6 +181,10 @@ void
 destroy_renderer(struct renderer *renderer)
 {
   destroy_state(renderer);
-  tuple_free(&renderer->rules);
-  tuple_free(&renderer->state);
+  free(renderer->rule_offsets);
+  free(renderer->state_offsets);
+  free(renderer->dependency_offsets);
+  free(renderer->rule_memory);
+  free(renderer->state_memory);
+  free(renderer->dependencies);
 }
