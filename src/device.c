@@ -185,10 +185,33 @@ dispatch_physical_device_rule(struct renderer *renderer, int rule)
   struct physical_device_conf *conf;
   struct physical_device_state *state;
   struct instance_state *instance;
+  uint32_t physical_device_count;
+  VkPhysicalDevice *physical_devices;
+  VkPhysicalDeviceProperties properties;
+  int i;
+
   assert(renderer->rule_types[rule] == RULE_TYPE_PHYSICAL_DEVICE);
   conf = get_rule_conf(renderer, rule);
   state = get_rule_state(renderer, rule);
   instance = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_INSTANCE);
+
+  vkEnumeratePhysicalDevices(instance->instance, &physical_device_count, NULL);
+  physical_devices = xmalloc(physical_device_count * sizeof(VkPhysicalDevice));
+  vkEnumeratePhysicalDevices(instance->instance, &physical_device_count,
+      physical_devices);
+  state->physical_device = VK_NULL_HANDLE;
+  for (i = 0; i < physical_device_count; i++) {
+    vkGetPhysicalDeviceProperties(physical_devices[i], &properties);
+    if (strcmp(conf->gpu_name, properties.deviceName) == 0) {
+      state->physical_device = physical_devices[i];
+      state->properties = properties;
+      break;
+    }
+  }
+  if (state->physical_device == VK_NULL_HANDLE) {
+    fprintf(stderr, "no suitable GPU found\n");
+    exit(1);
+  }
 }
 
 void

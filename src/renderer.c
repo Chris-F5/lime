@@ -16,7 +16,7 @@ configure_rules(struct renderer *renderer)
 {
   int instance, physical_device;
   instance = add_instance_rule(renderer);
-  physical_device = add_physical_device_rule(renderer, instance, "GPU NAME");
+  physical_device = add_physical_device_rule(renderer, instance, "AMD Radeon RX 580 Series (RADV POLARIS10)");
 }
 
 
