@@ -6,17 +6,26 @@
 #include <GLFW/glfw3.h>
 #include "lime.h"
 
+static int check_validation_layer_support(void);
+static void noop(struct renderer *renderer, int rule);
+static void dispatch_instance_rule(struct renderer *renderer, int rule);
+static void destroy_instance_state(struct renderer *renderer, int rule);
+static void dispatch_debug_messenger_rule(struct renderer *renderer, int rule);
+static void destroy_debug_messenger_state(struct renderer *renderer, int rule);
+static void dispatch_physical_device_rule(struct renderer *renderer, int rule);
+
 static const char *VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation";
 
-static int check_validation_layer_support(void);
-/*
-static VKAPI_ATTR VkBool32 VKAPI_CALL validation_layer_callback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-    VkDebugUtilsMessageTypeFlagsEXT type,
-    const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
-    void* user_data);
-static void create_debug_messenger(VkInstance instance, VkDebugUtilsMessengerEXT *debug_messenger);
-*/
+void (*rule_dispatch_funcs[])(struct renderer *renderer, int rule) = {
+  [RULE_TYPE_INSTANCE] = dispatch_instance_rule,
+  [RULE_TYPE_DEBUG_MESSENGER] = dispatch_debug_messenger_rule,
+  [RULE_TYPE_PHYSICAL_DEVICE] = dispatch_physical_device_rule,
+};
+void (*rule_destroy_funcs[])(struct renderer *renderer, int rule) = {
+  [RULE_TYPE_INSTANCE] = destroy_instance_state,
+  [RULE_TYPE_DEBUG_MESSENGER] = destroy_debug_messenger_state,
+  [RULE_TYPE_PHYSICAL_DEVICE] = noop,
+};
 
 static int
 check_validation_layer_support(void)
@@ -48,61 +57,23 @@ check_validation_layer_support(void)
   return 0;
 }
 
-/*
-static VKAPI_ATTR VkBool32 VKAPI_CALL validation_layer_callback(
-    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
-    VkDebugUtilsMessageTypeFlagsEXT type,
-    const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
-    void* user_data)
-{
-    fprintf(stderr, "validation layer: %s\n", callback_data->pMessage);
-    return VK_FALSE;
-}
-
 static void
-create_debug_messenger(VkInstance instance, VkDebugUtilsMessengerEXT *debug_messenger)
-{
-  VkDebugUtilsMessengerCreateInfoEXT create_info;
-  PFN_vkCreateDebugUtilsMessengerEXT create_func;
-  VkResult err;
-
-  create_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-  create_info.pNext = NULL;
-  create_info.flags = 0;
-  create_info.messageSeverity
-    = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT
-    | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
-    | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-  create_info.messageType
-    = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
-    | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
-    | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-  create_info.pfnUserCallback = validation_layer_callback;
-  create_info.pUserData = NULL;
-
-  create_func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
-    instance, "vkCreateDebugUtilsMessengerEXT");
-  if (create_func == NULL) {
-    PRINT_VK_ERROR(VK_ERROR_EXTENSION_NOT_PRESENT, "creating debug messenger");
-    exit(1);
-  }
-  create_func(instance, &create_info, NULL, debug_messenger);
-}
-*/
+noop(struct renderer *renderer, int rule)
+{ }
 
 int
-add_instance_rule(struct renderer *renderer)
+add_instance_rule(struct renderer *renderer, int request_validation_layers)
 {
   int rule;
   struct instance_conf *conf;
   rule = add_rule(renderer, RULE_TYPE_INSTANCE, sizeof(struct instance_conf),
       sizeof(struct instance_state));
   conf = get_rule_conf(renderer, rule);
-  conf->validation_layers_enabled = check_validation_layer_support();
+  conf->validation_layers_requested = request_validation_layers;
   return rule;
 }
 
-void
+static void
 dispatch_instance_rule(struct renderer *renderer, int rule)
 {
   struct instance_conf *conf;
@@ -116,9 +87,13 @@ dispatch_instance_rule(struct renderer *renderer, int rule)
   assert(renderer->rule_types[rule] == RULE_TYPE_INSTANCE);
   conf = get_rule_conf(renderer, rule);
   state = get_rule_state(renderer, rule);
+  state->validation_layers_enabled = conf->validation_layers_requested
+    && check_validation_layer_support();
+  if (conf->validation_layers_requested != state->validation_layers_enabled)
+    fprintf(stderr, "validation layers requested but not available\n");
 
   glfw_extensions = glfwGetRequiredInstanceExtensions(&glfw_extension_count);
-  if (conf->validation_layers_enabled) {
+  if (state->validation_layers_enabled) {
     extension_count = glfw_extension_count + 1;
     extensions = xmalloc(extension_count * sizeof(char *));
     memcpy(extensions, glfw_extensions, glfw_extension_count * sizeof(char *));
@@ -142,7 +117,7 @@ dispatch_instance_rule(struct renderer *renderer, int rule)
   create_info.pApplicationInfo = &app_info;
   create_info.enabledExtensionCount = extension_count;
   create_info.ppEnabledExtensionNames = extensions;
-  if (conf->validation_layers_enabled) {
+  if (state->validation_layers_enabled) {
     create_info.enabledLayerCount = 1;
     create_info.ppEnabledLayerNames = &VALIDATION_LAYER;
   } else {
@@ -158,12 +133,80 @@ dispatch_instance_rule(struct renderer *renderer, int rule)
     free(extensions);
 }
 
-void
+static void
 destroy_instance_state(struct renderer *renderer, int rule)
 {
   struct instance_state *state;
   state = get_rule_state(renderer, rule);
   vkDestroyInstance(state->instance, NULL);
+}
+
+
+int
+add_debug_messenger_rule(struct renderer *renderer, int instance,
+  VkDebugUtilsMessageSeverityFlagsEXT severity_flags,
+  VkDebugUtilsMessageTypeFlagsEXT type_flags,
+  PFN_vkDebugUtilsMessengerCallbackEXT callback_func)
+{
+  int rule;
+  struct debug_messenger_conf *conf;
+  rule = add_rule(renderer, RULE_TYPE_DEBUG_MESSENGER,
+      sizeof(struct debug_messenger_conf), sizeof(struct debug_messenger_state));
+  conf = get_rule_conf(renderer, rule);
+  conf->severity_flags = severity_flags;
+  conf->type_flags = type_flags;
+  conf->callback_func = callback_func;
+  add_rule_dependency(renderer, instance);
+  return rule;
+}
+
+static void
+dispatch_debug_messenger_rule(struct renderer *renderer, int rule)
+{
+  struct debug_messenger_conf *conf;
+  struct debug_messenger_state *state;
+  struct instance_state *instance;
+  VkDebugUtilsMessengerCreateInfoEXT create_info;
+  PFN_vkCreateDebugUtilsMessengerEXT create_func;
+  VkResult err;
+
+  conf = get_rule_conf(renderer, rule);
+  state = get_rule_state(renderer, rule);
+  instance = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_INSTANCE);
+  if (!instance->validation_layers_enabled) {
+    state->debug_messenger = VK_NULL_HANDLE;
+    return;
+  }
+
+  create_info.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
+  create_info.pNext = NULL;
+  create_info.flags = 0;
+  create_info.messageSeverity = conf->severity_flags;
+  create_info.messageType = conf->type_flags;
+  create_info.pfnUserCallback = conf->callback_func;
+  create_info.pUserData = NULL;
+
+  create_func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(
+    instance->instance, "vkCreateDebugUtilsMessengerEXT");
+  assert(create_func);
+  create_func(instance->instance, &create_info, NULL, &state->debug_messenger);
+}
+
+static void
+destroy_debug_messenger_state(struct renderer *renderer, int rule)
+{
+  PFN_vkDestroyDebugUtilsMessengerEXT debug_messenger_destroy_func;
+  struct debug_messenger_state *state;
+  struct instance_state *instance;
+
+  state = get_rule_state(renderer, rule);
+  if (state->debug_messenger == VK_NULL_HANDLE)
+    return;
+  instance = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_INSTANCE);
+  debug_messenger_destroy_func = (PFN_vkDestroyDebugUtilsMessengerEXT)
+    vkGetInstanceProcAddr(instance->instance, "vkDestroyDebugUtilsMessengerEXT");
+  assert(debug_messenger_destroy_func);
+  debug_messenger_destroy_func(instance->instance, state->debug_messenger, NULL);
 }
 
 int
@@ -179,7 +222,7 @@ add_physical_device_rule(struct renderer *renderer, int instance, const char *gp
   return rule;
 }
 
-void
+static void
 dispatch_physical_device_rule(struct renderer *renderer, int rule)
 {
   struct physical_device_conf *conf;
@@ -212,11 +255,4 @@ dispatch_physical_device_rule(struct renderer *renderer, int rule)
     fprintf(stderr, "no suitable GPU found\n");
     exit(1);
   }
-}
-
-void
-destroy_physical_device_state(struct renderer *renderer, int rule)
-{
-  struct physical_device_state *state;
-  state = get_rule_state(renderer, rule);
 }

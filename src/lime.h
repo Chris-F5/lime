@@ -5,14 +5,25 @@
 
 enum rule_type {
   RULE_TYPE_INSTANCE = 0,
-  RULE_TYPE_PHYSICAL_DEVICE = 1,
+  RULE_TYPE_DEBUG_MESSENGER = 1,
+  RULE_TYPE_PHYSICAL_DEVICE = 2,
 };
 
 struct instance_conf {
-  int validation_layers_enabled;
+  int validation_layers_requested;
 };
 struct instance_state {
   VkInstance instance;
+  int validation_layers_enabled;
+};
+
+struct debug_messenger_conf {
+  VkDebugUtilsMessageSeverityFlagsEXT severity_flags;
+  VkDebugUtilsMessageTypeFlagsEXT type_flags;
+  PFN_vkDebugUtilsMessengerCallbackEXT callback_func;
+};
+struct debug_messenger_state {
+  VkDebugUtilsMessengerEXT debug_messenger;
 };
 
 struct physical_device_conf {
@@ -51,11 +62,14 @@ void add_rule_dependency(struct renderer *renderer, int d);
 void create_renderer(struct renderer *renderer, GLFWwindow* window);
 void destroy_renderer(struct renderer *renderer);
 
-/* device.c */
-int add_instance_rule(struct renderer *renderer);
-void dispatch_instance_rule(struct renderer *renderer, int rule_index);
-void destroy_instance_state(struct renderer *renderer, int rule_index);
+
+/* rules.c */
+extern void (*rule_dispatch_funcs[])(struct renderer *renderer, int rule);
+extern void (*rule_destroy_funcs[])(struct renderer *renderer, int rule);
+int add_instance_rule(struct renderer *renderer, int request_validation_layers);
+int add_debug_messenger_rule(struct renderer *renderer, int instance,
+  VkDebugUtilsMessageSeverityFlagsEXT severity_flags,
+  VkDebugUtilsMessageTypeFlagsEXT type_flags,
+  PFN_vkDebugUtilsMessengerCallbackEXT callback_func);
 int add_physical_device_rule(struct renderer *renderer, int instance,
     const char *gpu_name);
-void dispatch_physical_device_rule(struct renderer *renderer, int rule_index);
-void destroy_physical_device_state(struct renderer *renderer, int rule_index);

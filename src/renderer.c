@@ -6,37 +6,54 @@
 #include <GLFW/glfw3.h>
 #include "lime.h"
 
+static VKAPI_ATTR VkBool32 VKAPI_CALL validation_layer_callback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+    VkDebugUtilsMessageTypeFlagsEXT type,
+    const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
+    void* user_data);
 static void configure_rules(struct renderer *renderer);
 static void dispatch_rules(struct renderer *renderer);
 static void destroy_state(struct renderer *renderer);
 static int get_rule_dependency_count(const struct renderer *renderer, int rule);
 
+static VKAPI_ATTR VkBool32 VKAPI_CALL
+validation_layer_callback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+    VkDebugUtilsMessageTypeFlagsEXT type,
+    const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
+    void* user_data)
+{
+    fprintf(stderr, "validation layer: %s\n", callback_data->pMessage);
+    return VK_FALSE;
+}
+
 static void
 configure_rules(struct renderer *renderer)
 {
   int instance, physical_device;
-  instance = add_instance_rule(renderer);
-  physical_device = add_physical_device_rule(renderer, instance, "AMD Radeon RX 580 Series (RADV POLARIS10)");
+  instance = add_instance_rule(renderer, 1);
+  add_debug_messenger_rule(renderer, instance,
+      VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT 
+      | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT
+      | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT,
+      VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT
+      | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT
+      | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT,
+      validation_layer_callback);
+  physical_device = add_physical_device_rule(renderer, instance,
+      "AMD Radeon RX 580 Series (RADV POLARIS10)");
 }
-
 
 static void
 dispatch_rules(struct renderer *renderer)
 {
   int rule, type;
+  void (*dispatch_func)(struct renderer *renderer, int rule);
   for (rule = 0; rule < renderer->rule_count; rule++) {
     type = renderer->rule_types[rule];
-    switch(type) {
-    case RULE_TYPE_INSTANCE:
-      dispatch_instance_rule(renderer, rule);
-      break;
-    case RULE_TYPE_PHYSICAL_DEVICE:
-      dispatch_physical_device_rule(renderer, rule);
-      break;
-    default:
-      fprintf(stderr, "unrecognised rule type (%d)\n", type);
-      exit(1);
-    }
+    dispatch_func = rule_dispatch_funcs[type];
+    assert(dispatch_func);
+    dispatch_func(renderer, rule);
   }
 }
 
@@ -44,19 +61,12 @@ static void
 destroy_state(struct renderer *renderer)
 {
   int rule, type;
+  void (*destroy_func)(struct renderer *renderer, int rule);
   for (rule = renderer->rule_count - 1; rule >= 0; rule--) {
     type = renderer->rule_types[rule];
-    switch(type) {
-    case RULE_TYPE_INSTANCE:
-      destroy_instance_state(renderer, rule);
-      break;
-    case RULE_TYPE_PHYSICAL_DEVICE:
-      destroy_physical_device_state(renderer, rule);
-      break;
-    default:
-      fprintf(stderr, "unrecognised rule type (%d)\n", type);
-      exit(1);
-    }
+    destroy_func = rule_destroy_funcs[type];
+    assert(destroy_func);
+    destroy_func(renderer, rule);
   }
 }
 
