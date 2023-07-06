@@ -16,6 +16,10 @@ static void dispatch_rules(struct renderer *renderer);
 static void destroy_state(struct renderer *renderer);
 static int get_rule_dependency_count(const struct renderer *renderer, int rule);
 
+static const char * const DEVICE_EXTENSIONS[] = {
+  VK_KHR_SWAPCHAIN_EXTENSION_NAME
+};
+
 static VKAPI_ATTR VkBool32 VKAPI_CALL
 validation_layer_callback(
     VkDebugUtilsMessageSeverityFlagBitsEXT severity,
@@ -31,6 +35,7 @@ static void
 configure_rules(struct renderer *renderer, GLFWwindow *window)
 {
   int instance, physical_device, surface, graphics_family, present_family;
+  int device, graphics_queue, present_queue;
   instance = add_instance_rule(renderer, 1);
   add_debug_messenger_rule(renderer, instance,
       VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT 
@@ -46,6 +51,12 @@ configure_rules(struct renderer *renderer, GLFWwindow *window)
   graphics_family = add_queue_family_rule(renderer, physical_device, -1,
       VK_QUEUE_GRAPHICS_BIT);
   present_family = add_queue_family_rule(renderer, physical_device, surface, 0);
+  device = add_device_rule(renderer, physical_device, 2,
+      (int []){graphics_family, present_family},
+      sizeof(DEVICE_EXTENSIONS[0]) / sizeof(DEVICE_EXTENSIONS),
+      DEVICE_EXTENSIONS);
+  graphics_queue = create_queue_rule(renderer, device, graphics_family);
+  present_queue = create_queue_rule(renderer, device, present_family);
 }
 
 static void

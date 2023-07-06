@@ -9,6 +9,8 @@ enum rule_type {
   RULE_TYPE_PHYSICAL_DEVICE = 3,
   RULE_TYPE_SURFACE = 4,
   RULE_TYPE_QUEUE_FAMILY = 5,
+  RULE_TYPE_DEVICE = 6,
+  RULE_TYPE_QUEUE = 7,
 };
 
 struct instance_conf {
@@ -51,6 +53,22 @@ struct queue_family_state {
   uint32_t family_index;
 };
 
+struct device_conf {
+  int family_count;
+  int extension_count;
+  const char *const*extension_names;
+  VkPhysicalDeviceFeatures features;
+};
+struct device_state {
+  VkDevice device;
+};
+
+struct queue_conf {
+};
+struct queue_state {
+  VkQueue queue;
+};
+
 struct renderer {
   int rules_allocated, rule_count;
   long conf_memory_allocated, state_memory_allocated;
@@ -80,7 +98,6 @@ void add_rule_dependency(struct renderer *renderer, int d);
 void create_renderer(struct renderer *renderer, GLFWwindow* window);
 void destroy_renderer(struct renderer *renderer);
 
-
 /* rules.c */
 extern void (*rule_dispatch_funcs[])(struct renderer *renderer, int rule);
 extern void (*state_destroy_funcs[])(struct renderer *renderer, int rule);
@@ -95,3 +112,7 @@ int add_window_surface_rule(struct renderer *renderer, int instance,
     GLFWwindow *window);
 int add_queue_family_rule(struct renderer *renderer, int physical_device,
     int surface, VkQueueFlags required_flags);
+int add_device_rule(struct renderer *renderer, int physical_device,
+    int family_count, int *families, int extension_count,
+    const char *const*extension_names);
+int create_queue_rule(struct renderer *renderer, int device, int queue_family);

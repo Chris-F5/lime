@@ -16,6 +16,9 @@ static void dispatch_physical_device_rule(struct renderer *renderer, int rule);
 static void dispatch_surface_rule(struct renderer *renderer, int rule);
 static void destroy_surface_state(struct renderer *renderer, int rule);
 static void dispatch_queue_family_rule(struct renderer *renderer, int rule);
+static void dispatch_device_rule(struct renderer *renderer, int rule);
+static void destroy_device_state(struct renderer *renderer, int rule);
+static void dispatch_queue_rule(struct renderer *renderer, int rule);
 
 static const char *VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation";
 
@@ -25,6 +28,8 @@ void (*rule_dispatch_funcs[])(struct renderer *renderer, int rule) = {
   [RULE_TYPE_PHYSICAL_DEVICE] = dispatch_physical_device_rule,
   [RULE_TYPE_SURFACE] = dispatch_surface_rule,
   [RULE_TYPE_QUEUE_FAMILY] = dispatch_queue_family_rule,
+  [RULE_TYPE_DEVICE] = dispatch_device_rule,
+  [RULE_TYPE_QUEUE] = dispatch_queue_rule,
 };
 void (*state_destroy_funcs[])(struct renderer *renderer, int rule) = {
   [RULE_TYPE_INSTANCE] = destroy_instance_state,
@@ -32,6 +37,8 @@ void (*state_destroy_funcs[])(struct renderer *renderer, int rule) = {
   [RULE_TYPE_PHYSICAL_DEVICE] = noop,
   [RULE_TYPE_SURFACE] = destroy_surface_state,
   [RULE_TYPE_QUEUE_FAMILY] = noop,
+  [RULE_TYPE_DEVICE] = destroy_device_state,
+  [RULE_TYPE_QUEUE] = noop,
 };
 
 static int
@@ -360,4 +367,122 @@ dispatch_queue_family_rule(struct renderer *renderer, int rule)
   }
   fprintf(stderr, "no suitable queue family found\n");
   exit(1);
+}
+
+int
+add_device_rule(struct renderer *renderer, int physical_device, int family_count,
+    int *families, int extension_count, const char *const*extension_names)
+{
+  int rule, i;
+  struct device_conf *conf;
+  rule = add_rule(renderer, RULE_TYPE_DEVICE, sizeof(struct device_conf),
+      sizeof(struct device_state));
+  conf = get_rule_conf(renderer, rule);
+  conf->family_count = family_count;
+  conf->extension_count = extension_count;
+  conf->extension_names = extension_names;
+  memset(&conf->features, 0, sizeof(conf->features));
+  add_rule_dependency(renderer, physical_device);
+  for (i = 0; i < family_count; i++)
+    add_rule_dependency(renderer, families[i]);
+  return rule;
+}
+
+static void
+dispatch_device_rule(struct renderer *renderer, int rule)
+{
+  struct device_conf *conf;
+  struct device_state *state;
+  struct physical_device_state *physical;
+  struct queue_family_state *family_state;
+  uint32_t *family_indices;
+  int i, j, family_index_count;
+  VkDeviceQueueCreateInfo *queue_create_infos;
+  float queue_priority;
+  VkDeviceCreateInfo create_info;
+  VkResult err;
+
+  conf = get_rule_conf(renderer, rule);
+  state = get_rule_state(renderer, rule);
+  physical = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_PHYSICAL_DEVICE);
+
+  /* Get unique family indices. */
+  family_indices = xmalloc(conf->family_count * sizeof(uint32_t));
+  family_index_count = 0;
+  for (i = 0; i < conf->family_count; i++) {
+    family_state = get_rule_dependency_state(renderer, rule, 1 + i,
+        RULE_TYPE_QUEUE_FAMILY);
+    for (j = 0; j < family_index_count; j++)
+      if (family_state->family_index == family_indices[j])
+        break;
+    if (j == family_index_count)
+      family_indices[family_index_count++] = family_state->family_index;
+  }
+
+  queue_create_infos = xmalloc(family_index_count * sizeof(VkDeviceQueueCreateInfo));
+  queue_priority = 1.0f;
+  for (i = 0; i < family_index_count; i++) {
+    queue_create_infos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+    queue_create_infos[i].pNext = NULL;
+    queue_create_infos[i].flags = 0;
+    queue_create_infos[i].queueFamilyIndex = family_indices[i];
+    queue_create_infos[i].queueCount = 1;
+    queue_create_infos[i].pQueuePriorities = &queue_priority;
+  }
+
+  create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  create_info.pNext = NULL;
+  create_info.flags = 0;
+  create_info.queueCreateInfoCount = family_index_count;
+  create_info.pQueueCreateInfos = queue_create_infos;
+  /* TODO: Enable device layers (deprecated) for compatibility. */
+  create_info.enabledLayerCount = 0;
+  create_info.ppEnabledLayerNames = NULL;
+  create_info.enabledExtensionCount = conf->extension_count;
+  create_info.ppEnabledExtensionNames = conf->extension_names;
+  create_info.pEnabledFeatures = &conf->features;
+
+  err = vkCreateDevice(physical->physical_device, &create_info, NULL, &state->device);
+  if (err != VK_SUCCESS) {
+    PRINT_VK_ERROR(err, "creating logical device");
+    exit(1);
+  }
+
+  free(queue_create_infos);
+  free(family_indices);
+}
+
+static void
+destroy_device_state(struct renderer *renderer, int rule)
+{
+  struct device_state *state;
+  state = get_rule_state(renderer, rule);
+  vkDestroyDevice(state->device, NULL);
+}
+
+int
+create_queue_rule(struct renderer *renderer, int device, int queue_family)
+{
+  int rule;
+  struct queue_conf *conf;
+  rule = add_rule(renderer, RULE_TYPE_QUEUE, sizeof(struct queue_conf),
+      sizeof(struct queue_state));
+  conf = get_rule_conf(renderer, rule);
+  add_rule_dependency(renderer, device);
+  add_rule_dependency(renderer, queue_family);
+  return rule;
+}
+
+static void
+dispatch_queue_rule(struct renderer *renderer, int rule)
+{
+  struct queue_conf *conf;
+  struct queue_state *state;
+  struct device_state *device;
+  struct queue_family_state *family;
+  conf = get_rule_conf(renderer, rule);
+  state = get_rule_state(renderer, rule);
+  device = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_DEVICE);
+  family = get_rule_dependency_state(renderer, rule, 1, RULE_TYPE_QUEUE_FAMILY);
+  vkGetDeviceQueue(device->device, family->family_index, 0, &state->queue);
 }
