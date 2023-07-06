@@ -13,6 +13,9 @@ static void destroy_instance_state(struct renderer *renderer, int rule);
 static void dispatch_debug_messenger_rule(struct renderer *renderer, int rule);
 static void destroy_debug_messenger_state(struct renderer *renderer, int rule);
 static void dispatch_physical_device_rule(struct renderer *renderer, int rule);
+static void dispatch_surface_rule(struct renderer *renderer, int rule);
+static void destroy_surface_state(struct renderer *renderer, int rule);
+static void dispatch_queue_family_rule(struct renderer *renderer, int rule);
 
 static const char *VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation";
 
@@ -20,11 +23,15 @@ void (*rule_dispatch_funcs[])(struct renderer *renderer, int rule) = {
   [RULE_TYPE_INSTANCE] = dispatch_instance_rule,
   [RULE_TYPE_DEBUG_MESSENGER] = dispatch_debug_messenger_rule,
   [RULE_TYPE_PHYSICAL_DEVICE] = dispatch_physical_device_rule,
+  [RULE_TYPE_SURFACE] = dispatch_surface_rule,
+  [RULE_TYPE_QUEUE_FAMILY] = dispatch_queue_family_rule,
 };
-void (*rule_destroy_funcs[])(struct renderer *renderer, int rule) = {
+void (*state_destroy_funcs[])(struct renderer *renderer, int rule) = {
   [RULE_TYPE_INSTANCE] = destroy_instance_state,
   [RULE_TYPE_DEBUG_MESSENGER] = destroy_debug_messenger_state,
   [RULE_TYPE_PHYSICAL_DEVICE] = noop,
+  [RULE_TYPE_SURFACE] = destroy_surface_state,
+  [RULE_TYPE_QUEUE_FAMILY] = noop,
 };
 
 static int
@@ -255,4 +262,102 @@ dispatch_physical_device_rule(struct renderer *renderer, int rule)
     fprintf(stderr, "no suitable GPU found\n");
     exit(1);
   }
+}
+
+int
+add_window_surface_rule(struct renderer *renderer, int instance, GLFWwindow *window)
+{
+  int rule;
+  struct surface_conf *conf;
+  rule = add_rule(renderer, RULE_TYPE_SURFACE, sizeof(struct surface_conf),
+      sizeof(struct surface_state));
+  conf = get_rule_conf(renderer, rule);
+  conf->window = window;
+  add_rule_dependency(renderer, instance);
+  return rule;
+}
+
+static void
+dispatch_surface_rule(struct renderer *renderer, int rule)
+{
+  struct surface_conf *conf;
+  struct surface_state *state;
+  struct instance_state *instance;
+  conf = get_rule_conf(renderer, rule);
+  state = get_rule_state(renderer, rule);
+  instance = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_INSTANCE);
+  glfwCreateWindowSurface(instance->instance, conf->window, NULL, &state->surface);
+}
+
+static void
+destroy_surface_state(struct renderer *renderer, int rule)
+{
+  struct surface_state *state;
+  struct instance_state *instance;
+  state = get_rule_state(renderer, rule);
+  instance = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_INSTANCE);
+  vkDestroySurfaceKHR(instance->instance, state->surface, NULL);
+}
+
+int
+add_queue_family_rule(struct renderer *renderer, int physical_device,
+    int surface, uint32_t required_flags)
+{
+  int rule;
+  struct queue_family_conf *conf;
+  rule = add_rule(renderer, RULE_TYPE_QUEUE_FAMILY, sizeof(struct queue_family_conf),
+      sizeof(struct queue_family_state));
+  conf = get_rule_conf(renderer, rule);
+  conf->required_flags = required_flags;
+  add_rule_dependency(renderer, physical_device);
+  if (surface == -1) {
+    conf->surface_support_required = 0;
+  } else {
+    conf->surface_support_required = 1;
+    add_rule_dependency(renderer, surface);
+  }
+  return rule;
+}
+
+static void
+dispatch_queue_family_rule(struct renderer *renderer, int rule)
+{
+  struct queue_family_conf *conf;
+  struct queue_family_state *state;
+  struct physical_device_state *physical;
+  struct surface_state *surface;
+  uint32_t family_count;
+  VkQueueFamilyProperties *properties;
+  uint32_t i;
+  VkResult err;
+  VkBool32 surface_support;
+
+  conf = get_rule_conf(renderer, rule);
+  state = get_rule_state(renderer, rule);
+  physical = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_PHYSICAL_DEVICE);
+  if (conf->surface_support_required)
+    surface = get_rule_dependency_state(renderer, rule, 1, RULE_TYPE_SURFACE);
+  vkGetPhysicalDeviceQueueFamilyProperties(physical->physical_device,
+      &family_count, NULL);
+  properties = xmalloc(family_count * sizeof(VkQueueFamilyProperties));
+  vkGetPhysicalDeviceQueueFamilyProperties(physical->physical_device,
+      &family_count, properties);
+  for (i = 0; i < family_count; i++) {
+    if (properties[i].queueFlags & conf->required_flags != conf->required_flags)
+      continue;
+    if (conf->surface_support_required) {
+      err = vkGetPhysicalDeviceSurfaceSupportKHR(physical->physical_device, i,
+          surface->surface, &surface_support);
+      if (err != VK_SUCCESS) {
+        PRINT_VK_ERROR(err, "checking queue family surface support");
+        exit(1);
+      }
+      if (!surface_support)
+        continue;
+    }
+    state->family_index = i;
+    return;
+  }
+  fprintf(stderr, "no suitable queue family found\n");
+  exit(1);
 }

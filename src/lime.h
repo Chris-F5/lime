@@ -6,7 +6,9 @@
 enum rule_type {
   RULE_TYPE_INSTANCE = 0,
   RULE_TYPE_DEBUG_MESSENGER = 1,
-  RULE_TYPE_PHYSICAL_DEVICE = 2,
+  RULE_TYPE_PHYSICAL_DEVICE = 3,
+  RULE_TYPE_SURFACE = 4,
+  RULE_TYPE_QUEUE_FAMILY = 5,
 };
 
 struct instance_conf {
@@ -34,6 +36,21 @@ struct physical_device_state {
   VkPhysicalDeviceProperties properties;
 };
 
+struct surface_conf {
+  GLFWwindow *window;
+};
+struct surface_state {
+  VkSurfaceKHR surface;
+};
+
+struct queue_family_conf {
+  VkQueueFlags required_flags;
+  unsigned char surface_support_required;
+};
+struct queue_family_state {
+  uint32_t family_index;
+};
+
 struct renderer {
   int rules_allocated, rule_count;
   long conf_memory_allocated, state_memory_allocated;
@@ -53,7 +70,8 @@ void *xrealloc(void *p, size_t len);
 char *vkresult_to_string(VkResult result);
 
 /* renderer.c */
-int add_rule(struct renderer *renderer, int type, size_t conf_size, size_t state_size);
+int add_rule(struct renderer *renderer, int type, size_t conf_size,
+    size_t state_size);
 void *get_rule_conf(const struct renderer *renderer, int rule);
 void *get_rule_state(const struct renderer *renderer, int rule);
 void *get_rule_dependency_state(const struct renderer *renderer, int rule,
@@ -65,7 +83,7 @@ void destroy_renderer(struct renderer *renderer);
 
 /* rules.c */
 extern void (*rule_dispatch_funcs[])(struct renderer *renderer, int rule);
-extern void (*rule_destroy_funcs[])(struct renderer *renderer, int rule);
+extern void (*state_destroy_funcs[])(struct renderer *renderer, int rule);
 int add_instance_rule(struct renderer *renderer, int request_validation_layers);
 int add_debug_messenger_rule(struct renderer *renderer, int instance,
   VkDebugUtilsMessageSeverityFlagsEXT severity_flags,
@@ -73,3 +91,7 @@ int add_debug_messenger_rule(struct renderer *renderer, int instance,
   PFN_vkDebugUtilsMessengerCallbackEXT callback_func);
 int add_physical_device_rule(struct renderer *renderer, int instance,
     const char *gpu_name);
+int add_window_surface_rule(struct renderer *renderer, int instance,
+    GLFWwindow *window);
+int add_queue_family_rule(struct renderer *renderer, int physical_device,
+    int surface, VkQueueFlags required_flags);

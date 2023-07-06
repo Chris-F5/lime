@@ -11,7 +11,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL validation_layer_callback(
     VkDebugUtilsMessageTypeFlagsEXT type,
     const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
     void* user_data);
-static void configure_rules(struct renderer *renderer);
+static void configure_rules(struct renderer *renderer, GLFWwindow *window);
 static void dispatch_rules(struct renderer *renderer);
 static void destroy_state(struct renderer *renderer);
 static int get_rule_dependency_count(const struct renderer *renderer, int rule);
@@ -28,9 +28,9 @@ validation_layer_callback(
 }
 
 static void
-configure_rules(struct renderer *renderer)
+configure_rules(struct renderer *renderer, GLFWwindow *window)
 {
-  int instance, physical_device;
+  int instance, physical_device, surface, graphics_family, present_family;
   instance = add_instance_rule(renderer, 1);
   add_debug_messenger_rule(renderer, instance,
       VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT 
@@ -42,6 +42,10 @@ configure_rules(struct renderer *renderer)
       validation_layer_callback);
   physical_device = add_physical_device_rule(renderer, instance,
       "AMD Radeon RX 580 Series (RADV POLARIS10)");
+  surface = add_window_surface_rule(renderer, instance, window);
+  graphics_family = add_queue_family_rule(renderer, physical_device, -1,
+      VK_QUEUE_GRAPHICS_BIT);
+  present_family = add_queue_family_rule(renderer, physical_device, surface, 0);
 }
 
 static void
@@ -64,7 +68,7 @@ destroy_state(struct renderer *renderer)
   void (*destroy_func)(struct renderer *renderer, int rule);
   for (rule = renderer->rule_count - 1; rule >= 0; rule--) {
     type = renderer->rule_types[rule];
-    destroy_func = rule_destroy_funcs[type];
+    destroy_func = state_destroy_funcs[type];
     assert(destroy_func);
     destroy_func(renderer, rule);
   }
@@ -196,7 +200,7 @@ create_renderer(struct renderer *renderer, GLFWwindow* window)
   renderer->conf_memory = NULL;
   renderer->state_memory = NULL;
   renderer->dependencies = NULL;
-  configure_rules(renderer);
+  configure_rules(renderer, window);
   dispatch_rules(renderer);
 }
 
