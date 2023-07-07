@@ -25,10 +25,12 @@ static void dispatch_swapchain_rule(struct renderer *renderer, int rule);
 static void destroy_swapchain_state(struct renderer *renderer, int rule);
 static void dispatch_swapchain_image_views_rule(struct renderer *renderer, int rule);
 static void destroy_swapchain_image_views_state(struct renderer *renderer, int rule);
+static void dispatch_command_pool_rule(struct renderer *renderer, int rule);
+static void destroy_command_pool_state(struct renderer *renderer, int rule);
 
 static const char *VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation";
 
-void (*rule_dispatch_funcs[])(struct renderer *renderer, int rule) = {
+const void (*rule_dispatch_funcs[])(struct renderer *renderer, int rule) = {
   [RULE_TYPE_INSTANCE] = dispatch_instance_rule,
   [RULE_TYPE_DEBUG_MESSENGER] = dispatch_debug_messenger_rule,
   [RULE_TYPE_PHYSICAL_DEVICE] = dispatch_physical_device_rule,
@@ -40,8 +42,9 @@ void (*rule_dispatch_funcs[])(struct renderer *renderer, int rule) = {
   [RULE_TYPE_QUEUE] = dispatch_queue_rule,
   [RULE_TYPE_SWAPCHAIN] = dispatch_swapchain_rule,
   [RULE_TYPE_SWAPCHAIN_IMAGE_VIEWS] = dispatch_swapchain_image_views_rule,
+  [RULE_TYPE_COMMAND_POOL] = dispatch_command_pool_rule,
 };
-void (*state_destroy_funcs[])(struct renderer *renderer, int rule) = {
+const void (*state_destroy_funcs[])(struct renderer *renderer, int rule) = {
   [RULE_TYPE_INSTANCE] = destroy_instance_state,
   [RULE_TYPE_DEBUG_MESSENGER] = destroy_debug_messenger_state,
   [RULE_TYPE_PHYSICAL_DEVICE] = noop,
@@ -53,6 +56,7 @@ void (*state_destroy_funcs[])(struct renderer *renderer, int rule) = {
   [RULE_TYPE_QUEUE] = noop,
   [RULE_TYPE_SWAPCHAIN] = destroy_swapchain_state,
   [RULE_TYPE_SWAPCHAIN_IMAGE_VIEWS] = destroy_swapchain_image_views_state,
+  [RULE_TYPE_COMMAND_POOL] = destroy_command_pool_state,
 };
 
 static int
@@ -734,4 +738,56 @@ destroy_swapchain_image_views_state(struct renderer *renderer, int rule)
   for (i = 0; i < state->image_count; i++)
     vkDestroyImageView(device->device, state->image_views[i], NULL);
   free(state->image_views);
+}
+
+int
+add_command_pool_rule(struct renderer *renderer, int device, int family,
+    VkCommandPoolCreateFlags flags)
+{
+  int rule;
+  struct command_pool_conf *conf;
+  rule = add_rule(renderer, RULE_TYPE_COMMAND_POOL,
+      sizeof(struct command_pool_conf), sizeof(struct command_pool_state));
+  conf = get_rule_conf(renderer, rule);
+  conf->flags = flags;
+  add_rule_dependency(renderer, device);
+  add_rule_dependency(renderer, family);
+  return rule;
+}
+
+static void
+dispatch_command_pool_rule(struct renderer *renderer, int rule)
+{
+  struct command_pool_conf *conf;
+  struct command_pool_state *state;
+  struct device_state *device;
+  struct queue_family_state *family;
+  VkCommandPoolCreateInfo create_info;
+  VkResult err;
+
+  conf = get_rule_conf(renderer, rule);
+  state = get_rule_state(renderer, rule);
+  device = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_DEVICE);
+  family = get_rule_dependency_state(renderer, rule, 1, RULE_TYPE_QUEUE_FAMILY);
+
+  create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  create_info.pNext = NULL;
+  create_info.flags = conf->flags;
+  create_info.queueFamilyIndex = family->family_index;
+
+  err = vkCreateCommandPool(device->device, &create_info, NULL, &state->command_pool);
+  if (err != VK_SUCCESS) {
+    PRINT_VK_ERROR(err, "creating command pool");
+    exit(1);
+  }
+}
+
+static void
+destroy_command_pool_state(struct renderer *renderer, int rule)
+{
+  struct command_pool_state *state;
+  struct device_state *device;
+  state = get_rule_state(renderer, rule);
+  device = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_DEVICE);
+  vkDestroyCommandPool(device->device, state->command_pool, NULL);
 }

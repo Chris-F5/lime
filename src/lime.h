@@ -15,6 +15,7 @@ enum rule_type {
   RULE_TYPE_QUEUE = 9,
   RULE_TYPE_SWAPCHAIN = 10,
   RULE_TYPE_SWAPCHAIN_IMAGE_VIEWS = 11,
+  RULE_TYPE_COMMAND_POOL = 12,
 };
 
 struct instance_conf {
@@ -67,6 +68,13 @@ struct queue_family_group_conf {
 struct queue_family_group_state {
   int physical_family_count;
   uint32_t family_indices[];
+};
+
+struct command_pool_conf {
+  VkCommandPoolCreateFlags flags;
+};
+struct command_pool_state {
+  VkCommandPool command_pool;
 };
 
 struct device_conf {
@@ -134,8 +142,8 @@ void create_renderer(struct renderer *renderer, GLFWwindow* window);
 void destroy_renderer(struct renderer *renderer);
 
 /* rules.c */
-extern void (*rule_dispatch_funcs[])(struct renderer *renderer, int rule);
-extern void (*state_destroy_funcs[])(struct renderer *renderer, int rule);
+extern const void (*rule_dispatch_funcs[])(struct renderer *renderer, int rule);
+extern const void (*state_destroy_funcs[])(struct renderer *renderer, int rule);
 int add_instance_rule(struct renderer *renderer, int request_validation_layers);
 int add_debug_messenger_rule(struct renderer *renderer, int instance,
   VkDebugUtilsMessageSeverityFlagsEXT severity_flags,
@@ -162,3 +170,5 @@ int add_swapchain_rule(struct renderer *renderer, int surface,
     VkPresentModeKHR present_mode);
 int add_swapchain_image_views_rule(struct renderer *renderer, int device,
     int swapchain);
+int add_command_pool_rule(struct renderer *renderer, int device, int family,
+    VkCommandPoolCreateFlags flags);

@@ -36,7 +36,7 @@ configure_rules(struct renderer *renderer, GLFWwindow *window)
 {
   int instance, physical_device, surface, surface_capabilities, graphics_family;
   int present_family, family_group, device, graphics_queue, present_queue;
-  int swapchain, swapchain_images;
+  int swapchain, swapchain_images, graphics_command_pool;
   instance = add_instance_rule(renderer, 1);
   add_debug_messenger_rule(renderer, instance,
       VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT 
@@ -66,6 +66,8 @@ configure_rules(struct renderer *renderer, GLFWwindow *window)
       (VkSurfaceFormatKHR){VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
       VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, VK_TRUE, VK_PRESENT_MODE_FIFO_KHR);
   swapchain_images = add_swapchain_image_views_rule(renderer, device, swapchain);
+  graphics_command_pool = add_command_pool_rule(renderer, device, graphics_family,
+      VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
 }
 
 static void
