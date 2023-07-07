@@ -34,8 +34,9 @@ validation_layer_callback(
 static void
 configure_rules(struct renderer *renderer, GLFWwindow *window)
 {
-  int instance, physical_device, surface, graphics_family, present_family;
-  int device, graphics_queue, present_queue;
+  int instance, physical_device, surface, surface_capabilities, graphics_family;
+  int present_family, family_group, device, graphics_queue, present_queue;
+  int swapchain, swapchain_images;
   instance = add_instance_rule(renderer, 1);
   add_debug_messenger_rule(renderer, instance,
       VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT 
@@ -48,15 +49,23 @@ configure_rules(struct renderer *renderer, GLFWwindow *window)
   physical_device = add_physical_device_rule(renderer, instance,
       "AMD Radeon RX 580 Series (RADV POLARIS10)");
   surface = add_window_surface_rule(renderer, instance, window);
+  surface_capabilities = add_surface_capabilities_rule(renderer, physical_device,
+      surface);
   graphics_family = add_queue_family_rule(renderer, physical_device, -1,
       VK_QUEUE_GRAPHICS_BIT);
   present_family = add_queue_family_rule(renderer, physical_device, surface, 0);
-  device = add_device_rule(renderer, physical_device, 2,
-      (int []){graphics_family, present_family},
+  family_group = add_queue_family_group_rule(renderer, 2,
+      (int []){graphics_family, present_family});
+  device = add_device_rule(renderer, physical_device, family_group,
       sizeof(DEVICE_EXTENSIONS[0]) / sizeof(DEVICE_EXTENSIONS),
       DEVICE_EXTENSIONS);
-  graphics_queue = create_queue_rule(renderer, device, graphics_family);
-  present_queue = create_queue_rule(renderer, device, present_family);
+  graphics_queue = add_queue_rule(renderer, device, graphics_family);
+  present_queue = add_queue_rule(renderer, device, present_family);
+  swapchain = add_swapchain_rule(renderer, surface, surface_capabilities,
+      device, family_group, 0, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
+      (VkSurfaceFormatKHR){VK_FORMAT_B8G8R8A8_UNORM, VK_COLOR_SPACE_SRGB_NONLINEAR_KHR},
+      VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR, VK_TRUE, VK_PRESENT_MODE_FIFO_KHR);
+  swapchain_images = add_swapchain_image_views_rule(renderer, device, swapchain);
 }
 
 static void

@@ -8,9 +8,13 @@ enum rule_type {
   RULE_TYPE_DEBUG_MESSENGER = 1,
   RULE_TYPE_PHYSICAL_DEVICE = 3,
   RULE_TYPE_SURFACE = 4,
-  RULE_TYPE_QUEUE_FAMILY = 5,
-  RULE_TYPE_DEVICE = 6,
-  RULE_TYPE_QUEUE = 7,
+  RULE_TYPE_SURFACE_CAPABILITIES = 5,
+  RULE_TYPE_QUEUE_FAMILY = 6,
+  RULE_TYPE_QUEUE_FAMILY_GROUP = 7,
+  RULE_TYPE_DEVICE = 8,
+  RULE_TYPE_QUEUE = 9,
+  RULE_TYPE_SWAPCHAIN = 10,
+  RULE_TYPE_SWAPCHAIN_IMAGE_VIEWS = 11,
 };
 
 struct instance_conf {
@@ -45,6 +49,10 @@ struct surface_state {
   VkSurfaceKHR surface;
 };
 
+struct surface_capabilities_state {
+  VkSurfaceCapabilitiesKHR capabilities;
+};
+
 struct queue_family_conf {
   VkQueueFlags required_flags;
   unsigned char surface_support_required;
@@ -53,8 +61,15 @@ struct queue_family_state {
   uint32_t family_index;
 };
 
+struct queue_family_group_conf {
+  int logical_family_count;
+};
+struct queue_family_group_state {
+  int physical_family_count;
+  uint32_t family_indices[];
+};
+
 struct device_conf {
-  int family_count;
   int extension_count;
   const char *const*extension_names;
   VkPhysicalDeviceFeatures features;
@@ -63,10 +78,30 @@ struct device_state {
   VkDevice device;
 };
 
-struct queue_conf {
-};
 struct queue_state {
   VkQueue queue;
+};
+
+struct swapchain_conf {
+  VkSwapchainCreateFlagsKHR flags;
+  VkImageUsageFlags usage_flags;
+  VkSurfaceFormatKHR surface_format;
+  VkCompositeAlphaFlagBitsKHR composite_alpha;
+  VkBool32 clipped;
+  VkPresentModeKHR present_mode;
+};
+struct swapchain_state {
+  VkSwapchainKHR swapchain;
+  VkFormat image_format;
+  uint32_t image_count;
+  VkImage *images;
+};
+
+struct swapchain_image_views_conf {
+};
+struct swapchain_image_views_state {
+  uint32_t image_count;
+  VkImageView *image_views;
 };
 
 struct renderer {
@@ -110,9 +145,20 @@ int add_physical_device_rule(struct renderer *renderer, int instance,
     const char *gpu_name);
 int add_window_surface_rule(struct renderer *renderer, int instance,
     GLFWwindow *window);
+int add_surface_capabilities_rule(struct renderer *renderer, int physical_device,
+    int surface);
 int add_queue_family_rule(struct renderer *renderer, int physical_device,
     int surface, VkQueueFlags required_flags);
+int add_queue_family_group_rule(struct renderer *renderer, int family_count,
+    int *families);
 int add_device_rule(struct renderer *renderer, int physical_device,
-    int family_count, int *families, int extension_count,
-    const char *const*extension_names);
-int create_queue_rule(struct renderer *renderer, int device, int queue_family);
+    int family_group, int extension_count, const char *const*extension_names);
+int add_queue_rule(struct renderer *renderer, int device, int queue_family);
+int add_swapchain_rule(struct renderer *renderer, int surface,
+    int surface_capabilities, int device, int family_group,
+    VkSwapchainCreateFlagsKHR flags, VkImageUsageFlags usage_flags,
+    VkSurfaceFormatKHR surface_format,
+    VkCompositeAlphaFlagBitsKHR composite_alpha, VkBool32 clipped,
+    VkPresentModeKHR present_mode);
+int add_swapchain_image_views_rule(struct renderer *renderer, int device,
+    int swapchain);

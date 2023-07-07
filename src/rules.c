@@ -15,10 +15,16 @@ static void destroy_debug_messenger_state(struct renderer *renderer, int rule);
 static void dispatch_physical_device_rule(struct renderer *renderer, int rule);
 static void dispatch_surface_rule(struct renderer *renderer, int rule);
 static void destroy_surface_state(struct renderer *renderer, int rule);
+static void dispatch_surface_capabilities_rule(struct renderer *renderer, int rule);
 static void dispatch_queue_family_rule(struct renderer *renderer, int rule);
+static void dispatch_queue_family_group_rule(struct renderer *renderer, int rule);
 static void dispatch_device_rule(struct renderer *renderer, int rule);
 static void destroy_device_state(struct renderer *renderer, int rule);
 static void dispatch_queue_rule(struct renderer *renderer, int rule);
+static void dispatch_swapchain_rule(struct renderer *renderer, int rule);
+static void destroy_swapchain_state(struct renderer *renderer, int rule);
+static void dispatch_swapchain_image_views_rule(struct renderer *renderer, int rule);
+static void destroy_swapchain_image_views_state(struct renderer *renderer, int rule);
 
 static const char *VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation";
 
@@ -27,18 +33,26 @@ void (*rule_dispatch_funcs[])(struct renderer *renderer, int rule) = {
   [RULE_TYPE_DEBUG_MESSENGER] = dispatch_debug_messenger_rule,
   [RULE_TYPE_PHYSICAL_DEVICE] = dispatch_physical_device_rule,
   [RULE_TYPE_SURFACE] = dispatch_surface_rule,
+  [RULE_TYPE_SURFACE_CAPABILITIES] = dispatch_surface_capabilities_rule,
   [RULE_TYPE_QUEUE_FAMILY] = dispatch_queue_family_rule,
+  [RULE_TYPE_QUEUE_FAMILY_GROUP] = dispatch_queue_family_group_rule,
   [RULE_TYPE_DEVICE] = dispatch_device_rule,
   [RULE_TYPE_QUEUE] = dispatch_queue_rule,
+  [RULE_TYPE_SWAPCHAIN] = dispatch_swapchain_rule,
+  [RULE_TYPE_SWAPCHAIN_IMAGE_VIEWS] = dispatch_swapchain_image_views_rule,
 };
 void (*state_destroy_funcs[])(struct renderer *renderer, int rule) = {
   [RULE_TYPE_INSTANCE] = destroy_instance_state,
   [RULE_TYPE_DEBUG_MESSENGER] = destroy_debug_messenger_state,
   [RULE_TYPE_PHYSICAL_DEVICE] = noop,
   [RULE_TYPE_SURFACE] = destroy_surface_state,
+  [RULE_TYPE_SURFACE_CAPABILITIES] = noop,
   [RULE_TYPE_QUEUE_FAMILY] = noop,
+  [RULE_TYPE_QUEUE_FAMILY_GROUP] = noop,
   [RULE_TYPE_DEVICE] = destroy_device_state,
   [RULE_TYPE_QUEUE] = noop,
+  [RULE_TYPE_SWAPCHAIN] = destroy_swapchain_state,
+  [RULE_TYPE_SWAPCHAIN_IMAGE_VIEWS] = destroy_swapchain_image_views_state,
 };
 
 static int
@@ -307,6 +321,37 @@ destroy_surface_state(struct renderer *renderer, int rule)
 }
 
 int
+add_surface_capabilities_rule(struct renderer *renderer, int physical_device,
+    int surface)
+{
+  int rule;
+  rule = add_rule(renderer, RULE_TYPE_SURFACE_CAPABILITIES, 0,
+      sizeof(struct surface_capabilities_state));
+  add_rule_dependency(renderer, physical_device);
+  add_rule_dependency(renderer, surface);
+  return rule;
+}
+
+static void
+dispatch_surface_capabilities_rule(struct renderer *renderer, int rule)
+{
+  struct surface_capabilities_state *state;
+  struct physical_device_state *physical;
+  struct surface_state *surface;
+  VkResult err;
+
+  state = get_rule_state(renderer, rule);
+  physical = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_PHYSICAL_DEVICE);
+  surface = get_rule_dependency_state(renderer, rule, 1, RULE_TYPE_SURFACE);
+  err = vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical->physical_device,
+      surface->surface, &state->capabilities);
+  if (err != VK_SUCCESS) {
+    PRINT_VK_ERROR(err, "getting physical device surface capabilities");
+    exit(1);
+  }
+}
+
+int
 add_queue_family_rule(struct renderer *renderer, int physical_device,
     int surface, uint32_t required_flags)
 {
@@ -370,21 +415,57 @@ dispatch_queue_family_rule(struct renderer *renderer, int rule)
 }
 
 int
-add_device_rule(struct renderer *renderer, int physical_device, int family_count,
-    int *families, int extension_count, const char *const*extension_names)
+add_queue_family_group_rule(struct renderer *renderer, int family_count,
+    int *families)
+{
+  int rule, i;
+  struct queue_family_group_conf *conf;
+  rule = add_rule(renderer, RULE_TYPE_QUEUE_FAMILY_GROUP,
+      sizeof(struct queue_family_group_conf),
+      sizeof(struct queue_family_group_state) + family_count * sizeof(uint32_t));
+  conf = get_rule_conf(renderer, rule);
+  conf->logical_family_count = family_count;
+  for (i = 0; i < family_count; i++)
+    add_rule_dependency(renderer, families[i]);
+  return rule;
+}
+
+static void
+dispatch_queue_family_group_rule(struct renderer *renderer, int rule)
+{
+  int i, j;
+  struct queue_family_group_conf *conf;
+  struct queue_family_group_state *state;
+  struct queue_family_state *family;
+
+  conf = get_rule_conf(renderer, rule);
+  state = get_rule_state(renderer, rule);
+
+  state->physical_family_count = 0;
+  for (i = 0; i < conf->logical_family_count; i++) {
+    family = get_rule_dependency_state(renderer, rule, i, RULE_TYPE_QUEUE_FAMILY);
+    for (j = 0; j < state->physical_family_count; j++)
+      if (family->family_index == state->family_indices[j])
+        break;
+    if (j == state->physical_family_count)
+      state->family_indices[state->physical_family_count++] = family->family_index;
+  }
+}
+
+int
+add_device_rule(struct renderer *renderer, int physical_device, int family_group,
+    int extension_count, const char *const*extension_names)
 {
   int rule, i;
   struct device_conf *conf;
   rule = add_rule(renderer, RULE_TYPE_DEVICE, sizeof(struct device_conf),
       sizeof(struct device_state));
   conf = get_rule_conf(renderer, rule);
-  conf->family_count = family_count;
   conf->extension_count = extension_count;
   conf->extension_names = extension_names;
   memset(&conf->features, 0, sizeof(conf->features));
   add_rule_dependency(renderer, physical_device);
-  for (i = 0; i < family_count; i++)
-    add_rule_dependency(renderer, families[i]);
+  add_rule_dependency(renderer, family_group);
   return rule;
 }
 
@@ -394,10 +475,9 @@ dispatch_device_rule(struct renderer *renderer, int rule)
   struct device_conf *conf;
   struct device_state *state;
   struct physical_device_state *physical;
-  struct queue_family_state *family_state;
-  uint32_t *family_indices;
-  int i, j, family_index_count;
+  struct queue_family_group_state *family_group;
   VkDeviceQueueCreateInfo *queue_create_infos;
+  int i;
   float queue_priority;
   VkDeviceCreateInfo create_info;
   VkResult err;
@@ -405,27 +485,16 @@ dispatch_device_rule(struct renderer *renderer, int rule)
   conf = get_rule_conf(renderer, rule);
   state = get_rule_state(renderer, rule);
   physical = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_PHYSICAL_DEVICE);
+  family_group = get_rule_dependency_state(renderer, rule, 1, RULE_TYPE_QUEUE_FAMILY_GROUP);
 
-  /* Get unique family indices. */
-  family_indices = xmalloc(conf->family_count * sizeof(uint32_t));
-  family_index_count = 0;
-  for (i = 0; i < conf->family_count; i++) {
-    family_state = get_rule_dependency_state(renderer, rule, 1 + i,
-        RULE_TYPE_QUEUE_FAMILY);
-    for (j = 0; j < family_index_count; j++)
-      if (family_state->family_index == family_indices[j])
-        break;
-    if (j == family_index_count)
-      family_indices[family_index_count++] = family_state->family_index;
-  }
-
-  queue_create_infos = xmalloc(family_index_count * sizeof(VkDeviceQueueCreateInfo));
+  queue_create_infos = xmalloc(family_group->physical_family_count
+      * sizeof(VkDeviceQueueCreateInfo));
   queue_priority = 1.0f;
-  for (i = 0; i < family_index_count; i++) {
+  for (i = 0; i < family_group->physical_family_count; i++) {
     queue_create_infos[i].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
     queue_create_infos[i].pNext = NULL;
     queue_create_infos[i].flags = 0;
-    queue_create_infos[i].queueFamilyIndex = family_indices[i];
+    queue_create_infos[i].queueFamilyIndex = family_group->family_indices[i];
     queue_create_infos[i].queueCount = 1;
     queue_create_infos[i].pQueuePriorities = &queue_priority;
   }
@@ -433,7 +502,7 @@ dispatch_device_rule(struct renderer *renderer, int rule)
   create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   create_info.pNext = NULL;
   create_info.flags = 0;
-  create_info.queueCreateInfoCount = family_index_count;
+  create_info.queueCreateInfoCount = family_group->physical_family_count;
   create_info.pQueueCreateInfos = queue_create_infos;
   /* TODO: Enable device layers (deprecated) for compatibility. */
   create_info.enabledLayerCount = 0;
@@ -449,7 +518,6 @@ dispatch_device_rule(struct renderer *renderer, int rule)
   }
 
   free(queue_create_infos);
-  free(family_indices);
 }
 
 static void
@@ -461,13 +529,10 @@ destroy_device_state(struct renderer *renderer, int rule)
 }
 
 int
-create_queue_rule(struct renderer *renderer, int device, int queue_family)
+add_queue_rule(struct renderer *renderer, int device, int queue_family)
 {
   int rule;
-  struct queue_conf *conf;
-  rule = add_rule(renderer, RULE_TYPE_QUEUE, sizeof(struct queue_conf),
-      sizeof(struct queue_state));
-  conf = get_rule_conf(renderer, rule);
+  rule = add_rule(renderer, RULE_TYPE_QUEUE, 0, sizeof(struct queue_state));
   add_rule_dependency(renderer, device);
   add_rule_dependency(renderer, queue_family);
   return rule;
@@ -476,13 +541,197 @@ create_queue_rule(struct renderer *renderer, int device, int queue_family)
 static void
 dispatch_queue_rule(struct renderer *renderer, int rule)
 {
-  struct queue_conf *conf;
   struct queue_state *state;
   struct device_state *device;
   struct queue_family_state *family;
-  conf = get_rule_conf(renderer, rule);
   state = get_rule_state(renderer, rule);
   device = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_DEVICE);
   family = get_rule_dependency_state(renderer, rule, 1, RULE_TYPE_QUEUE_FAMILY);
   vkGetDeviceQueue(device->device, family->family_index, 0, &state->queue);
+}
+
+int
+add_swapchain_rule(struct renderer *renderer, int surface,
+    int surface_capabilities, int device, int family_group,
+    VkSwapchainCreateFlagsKHR flags, VkImageUsageFlags usage_flags,
+    VkSurfaceFormatKHR surface_format,
+    VkCompositeAlphaFlagBitsKHR composite_alpha, VkBool32 clipped,
+    VkPresentModeKHR present_mode)
+{
+  int rule;
+  struct swapchain_conf *conf;
+  rule = add_rule(renderer, RULE_TYPE_SWAPCHAIN, sizeof(struct swapchain_conf),
+      sizeof(struct swapchain_state));
+  conf = get_rule_conf(renderer, rule);
+  conf->flags = flags;
+  conf->usage_flags = usage_flags;
+  conf->surface_format = surface_format;
+  conf->composite_alpha = composite_alpha;
+  conf->clipped = clipped;
+  conf->present_mode = present_mode;
+  add_rule_dependency(renderer, surface);
+  add_rule_dependency(renderer, surface_capabilities);
+  add_rule_dependency(renderer, family_group);
+  add_rule_dependency(renderer, device);
+  return rule;
+}
+
+static void
+dispatch_swapchain_rule(struct renderer *renderer, int rule)
+{
+  struct swapchain_conf *conf;
+  struct swapchain_state *state;
+  struct surface_state *surface;
+  struct surface_capabilities_state *surface_capabilities;
+  struct queue_family_group_state *family_group;
+  struct device_state *device;
+  VkSwapchainCreateInfoKHR create_info;
+  VkResult err;
+
+  conf = get_rule_conf(renderer, rule);
+  state = get_rule_state(renderer, rule);
+  surface = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_SURFACE);
+  surface_capabilities = get_rule_dependency_state(renderer, rule, 1,
+      RULE_TYPE_SURFACE_CAPABILITIES);
+  family_group = get_rule_dependency_state(renderer, rule, 2, RULE_TYPE_QUEUE_FAMILY_GROUP);
+  device = get_rule_dependency_state(renderer, rule, 3, RULE_TYPE_DEVICE);
+
+  create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+  create_info.pNext = NULL;
+  create_info.flags = conf->flags;
+  create_info.surface = surface->surface;
+  if (surface_capabilities->capabilities.minImageCount
+      == surface_capabilities->capabilities.maxImageCount)
+    create_info.minImageCount = surface_capabilities->capabilities.minImageCount;
+  else
+    create_info.minImageCount = surface_capabilities->capabilities.minImageCount + 1;
+  create_info.imageFormat = conf->surface_format.format;
+  create_info.imageColorSpace = conf->surface_format.colorSpace;
+  if (surface_capabilities->capabilities.currentExtent.width == 0xFFFFFFFF) {
+    create_info.imageExtent.width = 500;
+    create_info.imageExtent.height = 500;
+    fprintf(stderr, "surface did not specify extent\n");
+  } else {
+    create_info.imageExtent = surface_capabilities->capabilities.currentExtent;
+  }
+  create_info.imageArrayLayers = 1;
+  create_info.imageUsage = conf->usage_flags;
+  if (family_group->physical_family_count == 1) {
+    create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    create_info.queueFamilyIndexCount = 0;
+    create_info.pQueueFamilyIndices = NULL;
+  } else {
+    create_info.imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+    create_info.queueFamilyIndexCount = family_group->physical_family_count;
+    create_info.pQueueFamilyIndices = family_group->family_indices;
+  }
+  create_info.preTransform = surface_capabilities->capabilities.currentTransform;
+  create_info.compositeAlpha = conf->composite_alpha;
+  create_info.presentMode = conf->present_mode;
+  create_info.clipped = conf->clipped;
+  /* TODO: Look in the old state for the old swapchain? */
+  create_info.oldSwapchain = VK_NULL_HANDLE;
+
+  err = vkCreateSwapchainKHR(device->device, &create_info, NULL, &state->swapchain);
+  if (err != VK_SUCCESS) {
+    PRINT_VK_ERROR(err, "creating swapchain");
+    exit(1);
+  }
+
+  state->image_format = conf->surface_format.format;
+  err = vkGetSwapchainImagesKHR(device->device, state->swapchain,
+      &state->image_count, NULL);
+  if (err != VK_SUCCESS) {
+    PRINT_VK_ERROR(err, "getting swapchain images");
+    exit(1);
+  }
+  /* TODO: Use the old state's memory. */
+  state->images = xmalloc(state->image_count * sizeof(VkImage));
+  err = vkGetSwapchainImagesKHR(device->device, state->swapchain,
+      &state->image_count, state->images);
+  if (err != VK_SUCCESS) {
+    PRINT_VK_ERROR(err, "getting swapchain images");
+    exit(1);
+  }
+}
+
+static void
+destroy_swapchain_state(struct renderer *renderer, int rule)
+{
+  struct swapchain_state *state;
+  struct device_state *device;
+
+  state = get_rule_state(renderer, rule);
+  device = get_rule_dependency_state(renderer, rule, 3, RULE_TYPE_DEVICE);
+  vkDestroySwapchainKHR(device->device, state->swapchain, NULL);
+  free(state->images);
+}
+
+int
+add_swapchain_image_views_rule(struct renderer *renderer, int device,
+    int swapchain)
+{
+  int rule;
+  rule = add_rule(renderer, RULE_TYPE_SWAPCHAIN_IMAGE_VIEWS,
+      sizeof(struct swapchain_image_views_conf),
+      sizeof(struct swapchain_image_views_state));
+  add_rule_dependency(renderer, device);
+  add_rule_dependency(renderer, swapchain);
+  return rule;
+}
+
+static void
+dispatch_swapchain_image_views_rule(struct renderer *renderer, int rule)
+{
+  struct swapchain_image_views_conf *conf;
+  struct swapchain_image_views_state *state;
+  struct device_state *device;
+  struct swapchain_state *swapchain;
+  VkImageViewCreateInfo create_info;
+  VkResult err;
+  int i;
+
+  conf = get_rule_conf(renderer, rule);
+  state = get_rule_state(renderer, rule);
+  device = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_DEVICE);
+  swapchain = get_rule_dependency_state(renderer, rule, 1, RULE_TYPE_SWAPCHAIN);
+
+  state->image_count = swapchain->image_count;
+  state->image_views = xmalloc(state->image_count * sizeof(VkImageView));
+  
+  create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+  create_info.pNext = NULL;
+  create_info.flags = 0;
+  create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  create_info.format = swapchain->image_format;
+  create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+  create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+  create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+  create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+  create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  create_info.subresourceRange.baseMipLevel = 0;
+  create_info.subresourceRange.levelCount = 1;
+  create_info.subresourceRange.baseArrayLayer = 0;
+  create_info.subresourceRange.layerCount = 1;
+  for (i = 0; i < swapchain->image_count; i++) {
+    create_info.image = swapchain->images[i];
+    err = vkCreateImageView(device->device, &create_info, NULL, &state->image_views[i]);
+    if (err != VK_SUCCESS) {
+      PRINT_VK_ERROR(err, "creating swapchain image view");
+      exit(1);
+    }
+  }
+}
+
+static void
+destroy_swapchain_image_views_state(struct renderer *renderer, int rule)
+{
+  struct swapchain_image_views_state *state;
+  struct device_state *device;
+  int i;
+  state = get_rule_state(renderer, rule);
+  device = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_DEVICE);
+  for (i = 0; i < state->image_count; i++)
+    vkDestroyImageView(device->device, state->image_views[i], NULL);
+  free(state->image_views);
 }
