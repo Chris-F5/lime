@@ -16,6 +16,7 @@ enum rule_type {
   RULE_TYPE_SWAPCHAIN = 10,
   RULE_TYPE_SWAPCHAIN_IMAGE_VIEWS = 11,
   RULE_TYPE_COMMAND_POOL = 12,
+  RULE_TYPE_SHADER_MODULE = 13,
 };
 
 struct instance_conf {
@@ -112,6 +113,13 @@ struct swapchain_image_views_state {
   VkImageView *image_views;
 };
 
+struct shader_module_conf {
+  const char *file_name;
+};
+struct shader_module_state {
+  VkShaderModule shader_module;
+};
+
 struct renderer {
   int rules_allocated, rule_count;
   long conf_memory_allocated, state_memory_allocated;
@@ -172,3 +180,5 @@ int add_swapchain_image_views_rule(struct renderer *renderer, int device,
     int swapchain);
 int add_command_pool_rule(struct renderer *renderer, int device, int family,
     VkCommandPoolCreateFlags flags);
+int add_shader_module_rule(struct renderer *renderer, int device,
+    const char *file_name);

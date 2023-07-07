@@ -37,6 +37,7 @@ configure_rules(struct renderer *renderer, GLFWwindow *window)
   int instance, physical_device, surface, surface_capabilities, graphics_family;
   int present_family, family_group, device, graphics_queue, present_queue;
   int swapchain, swapchain_images, graphics_command_pool;
+  int vert_shader, frag_shader;
   instance = add_instance_rule(renderer, 1);
   add_debug_messenger_rule(renderer, instance,
       VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT 
@@ -68,6 +69,8 @@ configure_rules(struct renderer *renderer, GLFWwindow *window)
   swapchain_images = add_swapchain_image_views_rule(renderer, device, swapchain);
   graphics_command_pool = add_command_pool_rule(renderer, device, graphics_family,
       VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT);
+  vert_shader = add_shader_module_rule(renderer, device, "hello.vert.spv");
+  frag_shader = add_shader_module_rule(renderer, device, "hello.frag.spv");
 }
 
 static void

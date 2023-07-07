@@ -27,6 +27,8 @@ static void dispatch_swapchain_image_views_rule(struct renderer *renderer, int r
 static void destroy_swapchain_image_views_state(struct renderer *renderer, int rule);
 static void dispatch_command_pool_rule(struct renderer *renderer, int rule);
 static void destroy_command_pool_state(struct renderer *renderer, int rule);
+static void dispatch_shader_module_rule(struct renderer *renderer, int rule);
+static void destroy_shader_module_state(struct renderer *renderer, int rule);
 
 static const char *VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation";
 
@@ -43,6 +45,7 @@ const void (*rule_dispatch_funcs[])(struct renderer *renderer, int rule) = {
   [RULE_TYPE_SWAPCHAIN] = dispatch_swapchain_rule,
   [RULE_TYPE_SWAPCHAIN_IMAGE_VIEWS] = dispatch_swapchain_image_views_rule,
   [RULE_TYPE_COMMAND_POOL] = dispatch_command_pool_rule,
+  [RULE_TYPE_SHADER_MODULE] = dispatch_shader_module_rule,
 };
 const void (*state_destroy_funcs[])(struct renderer *renderer, int rule) = {
   [RULE_TYPE_INSTANCE] = destroy_instance_state,
@@ -57,6 +60,7 @@ const void (*state_destroy_funcs[])(struct renderer *renderer, int rule) = {
   [RULE_TYPE_SWAPCHAIN] = destroy_swapchain_state,
   [RULE_TYPE_SWAPCHAIN_IMAGE_VIEWS] = destroy_swapchain_image_views_state,
   [RULE_TYPE_COMMAND_POOL] = destroy_command_pool_state,
+  [RULE_TYPE_SHADER_MODULE] = destroy_shader_module_state,
 };
 
 static int
@@ -790,4 +794,70 @@ destroy_command_pool_state(struct renderer *renderer, int rule)
   state = get_rule_state(renderer, rule);
   device = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_DEVICE);
   vkDestroyCommandPool(device->device, state->command_pool, NULL);
+}
+
+int
+add_shader_module_rule(struct renderer *renderer, int device,
+    const char *file_name)
+{
+  int rule;
+  struct shader_module_conf *conf;
+  rule = add_rule(renderer, RULE_TYPE_SHADER_MODULE,
+      sizeof(struct shader_module_conf), sizeof(struct shader_module_state));
+  conf = get_rule_conf(renderer, rule);
+  conf->file_name = file_name;
+  add_rule_dependency(renderer, device);
+  return rule;
+}
+
+static void
+dispatch_shader_module_rule(struct renderer *renderer, int rule)
+{
+  struct shader_module_conf *conf;
+  struct shader_module_state *state;
+  struct device_state *device;
+  FILE *file;
+  long spv_length;
+  char *spv;
+  VkShaderModuleCreateInfo create_info;
+  VkResult err;
+
+  conf = get_rule_conf(renderer, rule);
+  state = get_rule_state(renderer, rule);
+  device = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_DEVICE);
+
+  file = fopen(conf->file_name, "r");
+  if (file == NULL) {
+    fprintf(stderr, "failed to open shader file '%s'\n", conf->file_name);
+    exit(1);
+  }
+  fseek(file, 0, SEEK_END);
+  spv_length = ftell(file);
+  fseek(file, 0, SEEK_SET);
+  spv = xmalloc(spv_length);
+  fread(spv, 1, spv_length, file);
+  fclose(file);
+
+  create_info.sType = VK_STRUCTURE_TYPE_SHADER_MODULE_CREATE_INFO;
+  create_info.pNext = NULL;
+  create_info.flags = 0;
+  create_info.codeSize = spv_length;
+  create_info.pCode = (uint32_t *)spv;
+  err = vkCreateShaderModule(device->device, &create_info, NULL, &state->shader_module);
+  if (err != VK_SUCCESS) {
+    PRINT_VK_ERROR(err, "creating shader module");
+    exit(1);
+  }
+
+  free(spv);
+}
+
+static void
+destroy_shader_module_state(struct renderer *renderer, int rule)
+{
+  struct shader_module_state *state;
+  struct device_state *device;
+  state = get_rule_state(renderer, rule);
+  device = get_rule_dependency_state(renderer, rule, 0, RULE_TYPE_DEVICE);
+  vkDestroyShaderModule(device->device, state->shader_module, NULL);
 }
