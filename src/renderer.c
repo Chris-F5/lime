@@ -178,7 +178,7 @@ get_rule_dependency_state(const struct renderer *renderer, int rule,
     exit(1);
   }
   if (dependency_index < 0
-      || dependency_index > get_rule_dependency_count(renderer, rule)) {
+      || dependency_index >= get_rule_dependency_count(renderer, rule)) {
     fprintf(stderr, "rule does not have dependency (%d)\n", dependency_index);
     exit(1);
   }
