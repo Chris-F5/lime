@@ -17,6 +17,7 @@
 struct vk_globals {
   uint32_t graphics_family_index;
   VkDevice device;
+  VkQueue graphics_queue;
 };
 
 extern struct vk_globals vk_globals;

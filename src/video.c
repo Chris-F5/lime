@@ -241,6 +241,42 @@ select_queue_family(void)
   free(properties);
 }
 
+static void
+init_device(void)
+{
+  VkDeviceCreateInfo create_info;
+  VkDeviceQueueCreateInfo queue_create_infos[1];
+  int i, logical_device_index, queue_table_index;
+  VkResult err;
+  VkDevice logical_device;
+
+  create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
+  create_info.pNext = NULL;
+  create_info.flags = 0;
+  create_info.queueCreateInfoCount = sizeof(queue_create_infos) / sizeof(queue_create_infos[0]);
+
+  queue_create_infos[0].sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
+  queue_create_infos[0].pNext = NULL;
+  queue_create_infos[0].flags = 0;
+  queue_create_infos[0].queueFamilyIndex = vk_globals.graphics_family_index;
+  queue_create_infos[0].queueCount = 1;
+  queue_create_infos[0].pQueuePriorities = &(float){1.0f};
+
+  create_info.pQueueCreateInfos = queue_create_infos;
+  /* TODO: Enable device layers (depricated) for compatibility. */
+  create_info.enabledLayerCount = 0;
+  create_info.ppEnabledLayerNames = NULL;
+  create_info.enabledExtensionCount = sizeof(EXTENSIONS) / sizeof(EXTENSIONS[0]);
+  create_info.ppEnabledExtensionNames = EXTENSIONS;
+  create_info.pEnabledFeatures = NULL;
+
+  err = vkCreateDevice(physical_device, &create_info, NULL, &vk_globals.device);
+  ASSERT_VK_RESULT(err, "creating logical device");
+
+  vkGetDeviceQueue(vk_globals.device, vk_globals.graphics_family_index, 0,
+      &vk_globals.graphics_queue);
+}
+
 void
 init_video(GLFWwindow *window)
 {
@@ -256,12 +292,14 @@ init_video(GLFWwindow *window)
   ASSERT_VK_RESULT(err, "creating window surface");
   select_physical_device();
   select_queue_family();
+  init_device();
 }
 
 void
 destroy_video(void)
 {
   PFN_vkDestroyDebugUtilsMessengerEXT debug_messenger_destroy_func;
+  vkDestroyDevice(vk_globals.device, NULL);
   vkDestroySurfaceKHR(instance, surface, NULL);
   if (debug_messenger != VK_NULL_HANDLE) {
     debug_messenger_destroy_func = (PFN_vkDestroyDebugUtilsMessengerEXT)
