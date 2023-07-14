@@ -16,15 +16,21 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL validation_layer_callback(
     const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
     void* user_data);
 static void create_debug_messenger(void);
+static int check_physical_device_extension_support(VkPhysicalDevice physical_device);
+static void select_physical_device(void);
 
 static const char *VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation";
+static const char * const EXTENSIONS[] = {
+  VK_KHR_SWAPCHAIN_EXTENSION_NAME
+};
 
 static VkInstance instance;
 static VkDebugUtilsMessengerEXT debug_messenger;
 static VkSurfaceKHR surface;
+static VkPhysicalDevice physical_device;
+static VkPhysicalDeviceProperties physical_device_properties;
 static VkSurfaceFormatKHR surfaceFormat;
 static VkPresentModeKHR presentMode;
-static VkFormat depthImageFormat;
 
 static int
 check_validation_layer_support(void)
@@ -152,6 +158,64 @@ create_debug_messenger(void)
   ASSERT_VK_RESULT(err, "creating debug utils messenger");
 }
 
+static int
+check_physical_device_extension_support(VkPhysicalDevice physical_device)
+{
+  VkResult err;
+  int available_extension_count, r, a;
+  VkExtensionProperties *available_extensions;
+
+  err = vkEnumerateDeviceExtensionProperties(physical_device, NULL,
+      &available_extension_count, NULL);
+  if (err != VK_SUCCESS) {
+    PRINT_VK_ERROR(err, "enumerating available physical device extensions");
+    exit(1);
+  }
+  available_extensions = xmalloc(
+      available_extension_count * sizeof(VkExtensionProperties));
+  err = vkEnumerateDeviceExtensionProperties(physical_device, NULL,
+      &available_extension_count, available_extensions);
+  if (err != VK_SUCCESS) {
+    PRINT_VK_ERROR(err, "enumerating available physical device extensions");
+    exit(1);
+  }
+  for (r = 0; r < sizeof(EXTENSIONS) / sizeof(EXTENSIONS[0]); r++) {
+    for (a = 0; a < available_extension_count; a++)
+      if (strcmp(EXTENSIONS[r],
+            available_extensions[a].extensionName) == 0)
+        break;
+    if (a == available_extension_count)
+      return 0;
+  }
+  return 1;
+}
+
+static void
+select_physical_device(void)
+{
+  uint32_t count;
+  VkPhysicalDevice *physical_devices;
+  VkResult err;
+  int i;
+  err = vkEnumeratePhysicalDevices(instance, &count, NULL);
+  ASSERT_VK_RESULT(err, "enumerating physical devices");
+  physical_devices = xmalloc(count * sizeof(VkPhysicalDevice));
+  err = vkEnumeratePhysicalDevices(instance, &count, physical_devices);
+  ASSERT_VK_RESULT(err, "enumerating physical devices");
+  if (count == 0) {
+    fprintf(stderr, "No physical devices with vulkan support.\n");
+    exit(1);
+  }
+  assert(physical_device == VK_NULL_HANDLE);
+  physical_device = physical_devices[0];
+  vkGetPhysicalDeviceProperties(physical_device, &physical_device_properties);
+  if (!check_physical_device_extension_support(physical_device)) {
+    fprintf(stderr, "Physical device does not support required extensions.\n");
+    exit(1);
+  }
+  free(physical_devices);
+}
+
 void
 init_video(GLFWwindow *window)
 {
@@ -165,6 +229,7 @@ init_video(GLFWwindow *window)
     create_debug_messenger();
   err = glfwCreateWindowSurface(instance, window, NULL, &surface);
   ASSERT_VK_RESULT(err, "creating window surface");
+  select_physical_device();
 }
 
 void
