@@ -8,6 +8,8 @@
 #include "lime.h"
 #include "utils.h"
 
+#define MAX_SWAPCHAIN_IMAGES 8
+
 static int check_validation_layer_support(void);
 static void init_instance(int validation_layers_enabled);
 static VKAPI_ATTR VkBool32 VKAPI_CALL validation_layer_callback(
@@ -19,6 +21,8 @@ static void create_debug_messenger(void);
 static int check_physical_device_extension_support(VkPhysicalDevice physical_device);
 static void select_physical_device(void);
 static void select_queue_family(void);
+static void init_device(void);
+static void create_swapchain(void);
 
 static const char *VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation";
 static const char * const EXTENSIONS[] = {
@@ -28,10 +32,15 @@ static const char * const EXTENSIONS[] = {
 static VkInstance instance;
 static VkDebugUtilsMessengerEXT debug_messenger;
 static VkSurfaceKHR surface;
+static VkSurfaceCapabilitiesKHR surface_capabilities;
 static VkPhysicalDevice physical_device;
 static VkPhysicalDeviceProperties physical_device_properties;
-static VkSurfaceFormatKHR surfaceFormat;
-static VkPresentModeKHR presentMode;
+static VkSurfaceFormatKHR surface_format;
+static VkPresentModeKHR present_mode;
+static VkSwapchainKHR swapchain;
+static uint32_t swapchain_image_count;
+static VkImage swapchain_images[MAX_SWAPCHAIN_IMAGES];
+static VkImageView swapchain_image_views[MAX_SWAPCHAIN_IMAGES];
 
 static int
 check_validation_layer_support(void)
@@ -66,7 +75,7 @@ check_validation_layer_support(void)
 static void
 init_instance(int validation_layers_enabled)
 {
-  int glfw_extension_count, extension_count;
+  uint32_t glfw_extension_count, extension_count;
   const char **glfw_extensions, **extensions;
   VkApplicationInfo app_info;
   VkInstanceCreateInfo create_info;
@@ -113,13 +122,6 @@ init_instance(int validation_layers_enabled)
     free(extensions);
 }
 
-static void
-glfw_error_callback(int _, const char* str)
-{
-    printf("glfw error: '%s'\n", str);
-    exit(1);
-}
-
 static VKAPI_ATTR VkBool32 VKAPI_CALL validation_layer_callback(
     VkDebugUtilsMessageSeverityFlagBitsEXT severity,
     VkDebugUtilsMessageTypeFlagsEXT type,
@@ -163,7 +165,8 @@ static int
 check_physical_device_extension_support(VkPhysicalDevice physical_device)
 {
   VkResult err;
-  int available_extension_count, r, a;
+  uint32_t available_extension_count;
+  int r, a;
   VkExtensionProperties *available_extensions;
 
   err = vkEnumerateDeviceExtensionProperties(physical_device, NULL,
@@ -197,7 +200,6 @@ select_physical_device(void)
   uint32_t count;
   VkPhysicalDevice *physical_devices;
   VkResult err;
-  int i;
   err = vkEnumeratePhysicalDevices(instance, &count, NULL);
   ASSERT_VK_RESULT(err, "enumerating physical devices");
   physical_devices = xmalloc(count * sizeof(VkPhysicalDevice));
@@ -246,9 +248,7 @@ init_device(void)
 {
   VkDeviceCreateInfo create_info;
   VkDeviceQueueCreateInfo queue_create_infos[1];
-  int i, logical_device_index, queue_table_index;
   VkResult err;
-  VkDevice logical_device;
 
   create_info.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
   create_info.pNext = NULL;
@@ -270,11 +270,89 @@ init_device(void)
   create_info.ppEnabledExtensionNames = EXTENSIONS;
   create_info.pEnabledFeatures = NULL;
 
+  assert(vk_globals.device == VK_NULL_HANDLE);
   err = vkCreateDevice(physical_device, &create_info, NULL, &vk_globals.device);
   ASSERT_VK_RESULT(err, "creating logical device");
 
+  assert(vk_globals.graphics_queue == VK_NULL_HANDLE);
   vkGetDeviceQueue(vk_globals.device, vk_globals.graphics_family_index, 0,
       &vk_globals.graphics_queue);
+}
+
+static void
+create_swapchain(void)
+{
+  VkSwapchainCreateInfoKHR create_info;
+  VkResult err;
+  VkImageViewCreateInfo view_create_info;
+  int i;
+  create_info.sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR;
+  create_info.pNext = NULL;
+  create_info.flags = 0;
+  create_info.surface = surface;
+  if (surface_capabilities.minImageCount == surface_capabilities.maxImageCount)
+    create_info.minImageCount = surface_capabilities.minImageCount;
+  else
+    create_info.minImageCount = surface_capabilities.minImageCount + 1;
+  create_info.imageFormat = surface_format.format;
+  create_info.imageColorSpace = surface_format.colorSpace;
+  if (surface_capabilities.currentExtent.width == 0xffffffff) {
+    create_info.imageExtent.width = 500;
+    create_info.imageExtent.height = 500;
+    fprintf(stderr, "surface did not specify extent\n");
+  } else {
+    create_info.imageExtent = surface_capabilities.currentExtent;
+  }
+  create_info.imageArrayLayers = 1;
+  create_info.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+  create_info.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  create_info.queueFamilyIndexCount = 0;
+  create_info.pQueueFamilyIndices = NULL;
+  create_info.preTransform = surface_capabilities.currentTransform;
+  create_info.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
+  create_info.presentMode = present_mode;
+  create_info.clipped = VK_TRUE;
+  create_info.oldSwapchain = VK_NULL_HANDLE;
+  err = vkCreateSwapchainKHR(vk_globals.device, &create_info, NULL, &swapchain);
+  ASSERT_VK_RESULT(err, "creating swapchain");
+
+  err = vkGetSwapchainImagesKHR(vk_globals.device, swapchain, &swapchain_image_count, NULL);
+  ASSERT_VK_RESULT(err, "getting swapchain images");
+  if (swapchain_image_count >= MAX_SWAPCHAIN_IMAGES) {
+    fprintf(stderr, "Too many swapchain images.\n");
+    exit(1);
+  }
+  err = vkGetSwapchainImagesKHR(vk_globals.device, swapchain, &swapchain_image_count, swapchain_images);
+  ASSERT_VK_RESULT(err, "getting swapchain images");
+
+  view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+  view_create_info.pNext = NULL;
+  view_create_info.flags = 0;
+  view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  view_create_info.format = surface_format.format;
+  view_create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+  view_create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+  view_create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+  view_create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+  view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+  view_create_info.subresourceRange.baseMipLevel = 0;
+  view_create_info.subresourceRange.levelCount = 1;
+  view_create_info.subresourceRange.baseArrayLayer = 0;
+  view_create_info.subresourceRange.layerCount = 1;
+  for (i = 0; i < swapchain_image_count; i++) {
+    view_create_info.image = swapchain_images[i];
+    err = vkCreateImageView(vk_globals.device, &view_create_info, NULL, &swapchain_image_views[i]);
+    ASSERT_VK_RESULT(err, "creating swapchain image view");
+  }
+}
+
+static void
+destroy_swapchain(void)
+{
+  int i;
+  for (i = 0; i < swapchain_image_count; i++)
+    vkDestroyImageView(vk_globals.device, swapchain_image_views[i], NULL);
+  vkDestroySwapchainKHR(vk_globals.device, swapchain, NULL);
 }
 
 void
@@ -291,14 +369,21 @@ init_video(GLFWwindow *window)
   err = glfwCreateWindowSurface(instance, window, NULL, &surface);
   ASSERT_VK_RESULT(err, "creating window surface");
   select_physical_device();
+  vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface, &surface_capabilities);
   select_queue_family();
   init_device();
+  /* TODO: check surface format and present mode are supported. */
+  surface_format.format = VK_FORMAT_B8G8R8A8_UNORM;
+  surface_format.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+  present_mode = VK_PRESENT_MODE_FIFO_KHR;
+  create_swapchain();
 }
 
 void
 destroy_video(void)
 {
   PFN_vkDestroyDebugUtilsMessengerEXT debug_messenger_destroy_func;
+  destroy_swapchain();
   vkDestroyDevice(vk_globals.device, NULL);
   vkDestroySurfaceKHR(instance, surface, NULL);
   if (debug_messenger != VK_NULL_HANDLE) {

@@ -1,6 +1,6 @@
 OUTPUTNAME=renderer
 CC=gcc
-CFLAGS=-g -D DEBUG
+CFLAGS=-g -D DEBUG -Wall
 LDFLAGS=-lglfw -lvulkan -lcglm -lm
 SRC=$(shell find src -type f -name "*.c")
 HEADERS=$(shell find src -type f -name "*.h")
