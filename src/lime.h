@@ -2,6 +2,7 @@
  * The following must be included before this file:
  * #include <stdio.h>
  * #include <vulkan/vulkan.h>
+ * #include <GLFW/glfw3.h>
  */
 
 #define PRINT_VK_ERROR(err, string) { \
@@ -18,7 +19,8 @@ extern struct {
 } vk_globals;
 
 /* video.c */
-void init_video(void);
+void init_video(GLFWwindow *window);
+void destroy_video(void);
 
 /* lime.c */
 char *vkresult_to_string(VkResult result);

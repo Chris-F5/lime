@@ -20,7 +20,6 @@ int
 main(int argc, char **argv)
 {
   GLFWwindow *window;
-  VkSurfaceKHR surface;
 
   glfwSetErrorCallback(glfw_error_callback);
   glfwInit();
@@ -28,10 +27,11 @@ main(int argc, char **argv)
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
   window = glfwCreateWindow(WIDTH, HEIGHT, "lime demo", NULL, NULL);
 
-  init_video();
+  init_video(window);
   printf("hello world\n");
 
   while (!glfwWindowShouldClose(window))
     glfwPollEvents();
+  destroy_video();
   return 0;
 }

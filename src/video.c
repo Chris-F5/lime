@@ -10,6 +10,12 @@
 
 static int check_validation_layer_support(void);
 static void init_instance(int validation_layers_enabled);
+static VKAPI_ATTR VkBool32 VKAPI_CALL validation_layer_callback(
+    VkDebugUtilsMessageSeverityFlagBitsEXT severity,
+    VkDebugUtilsMessageTypeFlagsEXT type,
+    const VkDebugUtilsMessengerCallbackDataEXT* callback_data,
+    void* user_data);
+static void create_debug_messenger(void);
 
 static const char *VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation";
 
@@ -100,6 +106,13 @@ init_instance(int validation_layers_enabled)
     free(extensions);
 }
 
+static void
+glfw_error_callback(int _, const char* str)
+{
+    printf("glfw error: '%s'\n", str);
+    exit(1);
+}
+
 static VKAPI_ATTR VkBool32 VKAPI_CALL validation_layer_callback(
     VkDebugUtilsMessageSeverityFlagBitsEXT severity,
     VkDebugUtilsMessageTypeFlagsEXT type,
@@ -110,7 +123,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL validation_layer_callback(
     return VK_FALSE;
 }
 
-void
+static void
 create_debug_messenger(void)
 {
   VkDebugUtilsMessengerCreateInfoEXT create_info;
@@ -140,21 +153,25 @@ create_debug_messenger(void)
 }
 
 void
-init_video(void)
+init_video(GLFWwindow *window)
 {
   int validation_layers_enabled;
+  VkResult err;
   validation_layers_enabled = check_validation_layer_support();
   if (!validation_layers_enabled)
     fprintf(stderr, "Validation layers not supported.\n");
   init_instance(validation_layers_enabled);
   if (validation_layers_enabled)
     create_debug_messenger();
+  err = glfwCreateWindowSurface(instance, window, NULL, &surface);
+  ASSERT_VK_RESULT(err, "creating window surface");
 }
 
 void
 destroy_video(void)
 {
   PFN_vkDestroyDebugUtilsMessengerEXT debug_messenger_destroy_func;
+  vkDestroySurfaceKHR(instance, surface, NULL);
   if (debug_messenger != VK_NULL_HANDLE) {
     debug_messenger_destroy_func = (PFN_vkDestroyDebugUtilsMessengerEXT)
       vkGetInstanceProcAddr(instance,"vkDestroyDebugUtilsMessengerEXT");
