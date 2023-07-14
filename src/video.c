@@ -18,6 +18,7 @@ static VKAPI_ATTR VkBool32 VKAPI_CALL validation_layer_callback(
 static void create_debug_messenger(void);
 static int check_physical_device_extension_support(VkPhysicalDevice physical_device);
 static void select_physical_device(void);
+static void select_queue_family(void);
 
 static const char *VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation";
 static const char * const EXTENSIONS[] = {
@@ -216,6 +217,30 @@ select_physical_device(void)
   free(physical_devices);
 }
 
+static void
+select_queue_family(void)
+{
+  uint32_t count;
+  VkQueueFamilyProperties *properties;
+  int i;
+  VkResult err;
+  VkBool32 surface_support;
+
+  vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &count, NULL);
+  properties = xmalloc(count * sizeof(VkQueueFamilyProperties));
+  vkGetPhysicalDeviceQueueFamilyProperties(physical_device, &count, properties);
+
+  for (i = 0; i < count; i++) {
+    err = vkGetPhysicalDeviceSurfaceSupportKHR(physical_device, i, surface, &surface_support);
+    ASSERT_VK_RESULT(err, "getting queue family surface support");
+    if (properties[i].queueFlags & VK_QUEUE_GRAPHICS_BIT && surface_support) {
+      vk_globals.graphics_family_index = i;
+      break;
+    }
+  }
+  free(properties);
+}
+
 void
 init_video(GLFWwindow *window)
 {
@@ -230,6 +255,7 @@ init_video(GLFWwindow *window)
   err = glfwCreateWindowSurface(instance, window, NULL, &surface);
   ASSERT_VK_RESULT(err, "creating window surface");
   select_physical_device();
+  select_queue_family();
 }
 
 void

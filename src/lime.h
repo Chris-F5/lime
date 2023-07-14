@@ -14,9 +14,12 @@
   exit(1); \
 }
 
-extern struct {
+struct vk_globals {
+  uint32_t graphics_family_index;
   VkDevice device;
-} vk_globals;
+};
+
+extern struct vk_globals vk_globals;
 
 /* video.c */
 void init_video(GLFWwindow *window);
