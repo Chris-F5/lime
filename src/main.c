@@ -6,8 +6,8 @@
 
 static void glfw_error_callback(int _, const char* errorString);
 
-const uint32_t WIDTH = 800;
-const uint32_t HEIGHT = 800;
+static const uint32_t WIDTH = 800;
+static const uint32_t HEIGHT = 800;
 
 static void
 glfw_error_callback(int _, const char* str)
@@ -21,8 +21,6 @@ main(int argc, char **argv)
 {
   GLFWwindow *window;
   VkSurfaceKHR surface;
-  VkResult err;
-  struct lime_renderer renderer;
 
   glfwSetErrorCallback(glfw_error_callback);
   glfwInit();
@@ -30,11 +28,10 @@ main(int argc, char **argv)
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
   window = glfwCreateWindow(WIDTH, HEIGHT, "lime demo", NULL, NULL);
 
-  create_renderer(&renderer, window);
+  init_video();
   printf("hello world\n");
 
   while (!glfwWindowShouldClose(window))
     glfwPollEvents();
-  destroy_renderer(&renderer);
   return 0;
 }
