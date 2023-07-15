@@ -38,7 +38,7 @@ main(int argc, char **argv)
     glfwPollEvents();
     draw_frame();
   }
-
+  vkDeviceWaitIdle(vk_globals.device);
   destroy_pipelines();
   destroy_shader_modules();
   destroy_pipeline_layouts();

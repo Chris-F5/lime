@@ -363,6 +363,7 @@ init_render_passes(void)
 {
   VkAttachmentDescription attachments[1];
   VkAttachmentReference color_attachments[1];
+  VkSubpassDependency subpass_dependencies[1];
   VkSubpassDescription subpass;
   VkRenderPassCreateInfo create_info;
   VkResult err;
@@ -379,6 +380,14 @@ init_render_passes(void)
 
   color_attachments[0].attachment = 0;
   color_attachments[0].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+  subpass_dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+  subpass_dependencies[0].dstSubpass = 0;
+  subpass_dependencies[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  subpass_dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  subpass_dependencies[0].srcAccessMask = 0;
+  subpass_dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  subpass_dependencies[0].dependencyFlags = 0;
 
   subpass.flags = 0;
   subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
@@ -398,8 +407,8 @@ init_render_passes(void)
   create_info.pAttachments = attachments;
   create_info.subpassCount = 1;
   create_info.pSubpasses = &subpass;
-  create_info.dependencyCount = 0;
-  create_info.pDependencies = NULL;
+  create_info.dependencyCount = sizeof(subpass_dependencies) / sizeof(subpass_dependencies[0]);
+  create_info.pDependencies = subpass_dependencies;
   assert(vk_globals.render_pass == VK_NULL_HANDLE);
   err = vkCreateRenderPass(vk_globals.device, &create_info, NULL, &vk_globals.render_pass);
   ASSERT_VK_RESULT(err, "creating render pass");
@@ -439,7 +448,7 @@ init_synchronization_objects(void)
   semaphore_create_info.flags = 0;
   fence_create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
   fence_create_info.pNext = NULL;
-  fence_create_info.flags = 0;
+  fence_create_info.flags = VK_FENCE_CREATE_SIGNALED_BIT;
   assert(image_available_semaphore == VK_NULL_HANDLE);
   assert(render_finished_semaphore == VK_NULL_HANDLE);
   assert(frame_finished_fence == VK_NULL_HANDLE);
@@ -497,12 +506,10 @@ record_command_buffer(VkCommandBuffer command_buffer, int swap_index)
   ASSERT_VK_RESULT(err, "begining command buffer");
 
   assert(vk_globals.surface_format.format == VK_FORMAT_B8G8R8A8_UNORM);
-  clear_value.color.float32[0] = 128.0f / 255.0f;
-  clear_value.color.float32[1] = 218.0f / 255.0f;
-  clear_value.color.float32[2] = 251.0f / 255.0f;
+  clear_value.color.float32[0] = 128.0f / 255.0;
+  clear_value.color.float32[1] = 218.0f / 255.0;
+  clear_value.color.float32[2] = 251.0f / 255.0;
   clear_value.color.float32[3] = 1.0f;
-  clear_value.depthStencil.depth = 0.0f;
-  clear_value.depthStencil.stencil = 0;
 
   render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   render_pass_info.pNext = NULL;
@@ -561,6 +568,37 @@ init_video(GLFWwindow *window)
 void
 draw_frame(void)
 {
+  uint32_t swapchain_index;
+  VkSubmitInfo submit_info;
+  VkPresentInfoKHR present_info;
+  VkResult err;
+
+  vkWaitForFences(vk_globals.device, 1, &frame_finished_fence, VK_TRUE, UINT64_MAX);
+  vkResetFences(vk_globals.device, 1, &frame_finished_fence);
+  err = vkAcquireNextImageKHR(vk_globals.device, swapchain, UINT64_MAX,
+      image_available_semaphore, VK_NULL_HANDLE, &swapchain_index);
+  ASSERT_VK_RESULT(err, "acquiring next swapchain image");
+  submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+  submit_info.pNext = NULL;
+  submit_info.waitSemaphoreCount = 1;
+  submit_info.pWaitSemaphores = &image_available_semaphore;
+  submit_info.pWaitDstStageMask = &(VkPipelineStageFlags){VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT};
+  submit_info.commandBufferCount = 1;
+  submit_info.pCommandBuffers = &command_buffers[swapchain_index];
+  submit_info.signalSemaphoreCount = 1;
+  submit_info.pSignalSemaphores = &render_finished_semaphore;
+  err = vkQueueSubmit(vk_globals.graphics_queue, 1, &submit_info, frame_finished_fence);
+  ASSERT_VK_RESULT(err, "submitting command buffer");
+  present_info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
+  present_info.pNext = NULL;
+  present_info.waitSemaphoreCount = 1;
+  present_info.pWaitSemaphores = &render_finished_semaphore;
+  present_info.swapchainCount = 1;
+  present_info.pSwapchains = &swapchain;
+  present_info.pImageIndices = &swapchain_index;
+  present_info.pResults = NULL;
+  err = vkQueuePresentKHR(vk_globals.graphics_queue, &present_info);
+  ASSERT_VK_RESULT(err, "submitting present request");
 }
 
 void
