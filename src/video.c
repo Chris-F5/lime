@@ -312,6 +312,8 @@ create_swapchain(void)
   create_info.presentMode = present_mode;
   create_info.clipped = VK_TRUE;
   create_info.oldSwapchain = VK_NULL_HANDLE;
+
+  vk_globals.swapchain_extent = create_info.imageExtent;
   err = vkCreateSwapchainKHR(vk_globals.device, &create_info, NULL, &swapchain);
   ASSERT_VK_RESULT(err, "creating swapchain");
 

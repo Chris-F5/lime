@@ -18,9 +18,14 @@
 struct vk_globals {
   uint32_t graphics_family_index;
   VkSurfaceFormatKHR surface_format;
+  VkExtent2D swapchain_extent;
   VkDevice device;
   VkQueue graphics_queue;
+
   VkRenderPass render_pass;
+
+  VkPipelineLayout pipeline_layout;
+  VkPipeline pipeline;
 };
 
 extern struct vk_globals vk_globals;
@@ -32,6 +37,14 @@ void destroy_video(void);
 /* render_passes.c */
 void init_render_passes(void);
 void destroy_render_passes(void);
+
+/* pipelines.c */
+void init_pipeline_layouts(void);
+void destroy_pipeline_layouts(void);
+void init_shader_modules(void);
+void destroy_shader_modules(void);
+void create_pipelines(void);
+void destroy_pipelines(void);
 
 /* lime.c */
 char *vkresult_to_string(VkResult result);

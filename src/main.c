@@ -29,11 +29,17 @@ main(int argc, char **argv)
 
   init_video(window);
   init_render_passes();
+  init_pipeline_layouts();
+  init_shader_modules();
+  create_pipelines();
   printf("hello world\n");
 
   while (!glfwWindowShouldClose(window))
     glfwPollEvents();
 
+  destroy_pipelines();
+  destroy_shader_modules();
+  destroy_pipeline_layouts();
   destroy_render_passes();
   destroy_video();
   return 0;

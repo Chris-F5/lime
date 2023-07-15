@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <assert.h>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 #include "lime.h"
@@ -46,6 +47,7 @@ init_render_passes(void)
   create_info.pSubpasses = &subpass;
   create_info.dependencyCount = 0;
   create_info.pDependencies = NULL;
+  assert(vk_globals.render_pass == VK_NULL_HANDLE);
   err = vkCreateRenderPass(vk_globals.device, &create_info, NULL, &vk_globals.render_pass);
   ASSERT_VK_RESULT(err, "creating render pass");
 }
