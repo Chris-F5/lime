@@ -34,8 +34,10 @@ main(int argc, char **argv)
   record_command_buffers();
   printf("hello world\n");
 
-  while (!glfwWindowShouldClose(window))
+  while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
+    draw_frame();
+  }
 
   destroy_pipelines();
   destroy_shader_modules();

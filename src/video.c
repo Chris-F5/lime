@@ -25,6 +25,7 @@ static void init_device(void);
 static void create_swapchain(void);
 static void init_render_passes(void);
 static void init_framebuffers(void);
+static void init_synchronization_objects(void);
 static void create_graphics_command_pool(void);
 static void allocate_command_buffers(void);
 static void record_command_buffer(VkCommandBuffer command_buffer, int swap_index);
@@ -48,6 +49,8 @@ static VkImageView swapchain_image_views[MAX_SWAPCHAIN_IMAGES];
 static VkFramebuffer swapchain_framebuffers[MAX_SWAPCHAIN_IMAGES];
 static VkCommandPool graphics_command_pool;
 static VkCommandBuffer command_buffers[MAX_SWAPCHAIN_IMAGES];
+static VkSemaphore image_available_semaphore, render_finished_semaphore;
+static VkFence frame_finished_fence;
 
 static int
 check_validation_layer_support(void)
@@ -426,6 +429,31 @@ init_framebuffers(void)
 }
 
 static void
+init_synchronization_objects(void)
+{
+  VkSemaphoreCreateInfo semaphore_create_info;
+  VkFenceCreateInfo fence_create_info;
+  VkResult err;
+  semaphore_create_info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
+  semaphore_create_info.pNext = NULL;
+  semaphore_create_info.flags = 0;
+  fence_create_info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+  fence_create_info.pNext = NULL;
+  fence_create_info.flags = 0;
+  assert(image_available_semaphore == VK_NULL_HANDLE);
+  assert(render_finished_semaphore == VK_NULL_HANDLE);
+  assert(frame_finished_fence == VK_NULL_HANDLE);
+  err = vkCreateSemaphore(vk_globals.device, &semaphore_create_info, NULL,
+      &image_available_semaphore);
+  ASSERT_VK_RESULT(err, "creating semaphore");
+  err = vkCreateSemaphore(vk_globals.device, &semaphore_create_info, NULL,
+      &render_finished_semaphore);
+  ASSERT_VK_RESULT(err, "creating semaphore");
+  err = vkCreateFence(vk_globals.device, &fence_create_info, NULL,
+      &frame_finished_fence);
+}
+
+static void
 create_graphics_command_pool(void)
 {
   VkCommandPoolCreateInfo create_info;
@@ -527,6 +555,12 @@ init_video(GLFWwindow *window)
   init_framebuffers();
   create_graphics_command_pool();
   allocate_command_buffers();
+  init_synchronization_objects();
+}
+
+void
+draw_frame(void)
+{
 }
 
 void
@@ -534,6 +568,10 @@ destroy_video(void)
 {
   PFN_vkDestroyDebugUtilsMessengerEXT debug_messenger_destroy_func;
   int i;
+
+  vkDestroySemaphore(vk_globals.device, image_available_semaphore, NULL);
+  vkDestroySemaphore(vk_globals.device, render_finished_semaphore, NULL);
+  vkDestroyFence(vk_globals.device, frame_finished_fence, NULL);
 
   vkDestroyCommandPool(vk_globals.device, graphics_command_pool, NULL);
 

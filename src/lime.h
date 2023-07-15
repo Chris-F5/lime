@@ -32,6 +32,7 @@ extern struct vk_globals vk_globals;
 /* video.c */
 void init_video(GLFWwindow *window);
 void record_command_buffers(void);
+void draw_frame(void);
 void destroy_video(void);
 
 /* pipelines.c */
