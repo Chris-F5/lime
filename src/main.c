@@ -31,6 +31,7 @@ main(int argc, char **argv)
   init_pipeline_layouts();
   init_shader_modules();
   create_pipelines();
+  record_command_buffers();
   printf("hello world\n");
 
   while (!glfwWindowShouldClose(window))

@@ -25,6 +25,9 @@ static void init_device(void);
 static void create_swapchain(void);
 static void init_render_passes(void);
 static void init_framebuffers(void);
+static void create_graphics_command_pool(void);
+static void allocate_command_buffers(void);
+static void record_command_buffer(VkCommandBuffer command_buffer, int swap_index);
 
 static const char *VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation";
 static const char * const EXTENSIONS[] = {
@@ -43,6 +46,8 @@ static uint32_t swapchain_image_count;
 static VkImage swapchain_images[MAX_SWAPCHAIN_IMAGES];
 static VkImageView swapchain_image_views[MAX_SWAPCHAIN_IMAGES];
 static VkFramebuffer swapchain_framebuffers[MAX_SWAPCHAIN_IMAGES];
+static VkCommandPool graphics_command_pool;
+static VkCommandBuffer command_buffers[MAX_SWAPCHAIN_IMAGES];
 
 static int
 check_validation_layer_support(void)
@@ -420,6 +425,82 @@ init_framebuffers(void)
   }
 }
 
+static void
+create_graphics_command_pool(void)
+{
+  VkCommandPoolCreateInfo create_info;
+  VkResult err;
+  create_info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
+  create_info.pNext = NULL;
+  create_info.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+  create_info.queueFamilyIndex = vk_globals.graphics_family_index;
+  assert(graphics_command_pool == VK_NULL_HANDLE);
+  err = vkCreateCommandPool(vk_globals.device, &create_info, NULL, &graphics_command_pool);
+  ASSERT_VK_RESULT(err, "creating graphics command pool");
+}
+
+static void
+allocate_command_buffers(void)
+{
+  VkCommandBufferAllocateInfo allocate_info;
+  VkResult err;
+  allocate_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+  allocate_info.pNext = NULL;
+  allocate_info.commandPool = graphics_command_pool;
+  allocate_info.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+  allocate_info.commandBufferCount = swapchain_image_count;
+  assert(command_buffers[0] == VK_NULL_HANDLE);
+  err = vkAllocateCommandBuffers(vk_globals.device, &allocate_info, command_buffers);
+  ASSERT_VK_RESULT(err, "allocating command buffers");
+}
+
+static void
+record_command_buffer(VkCommandBuffer command_buffer, int swap_index)
+{
+  VkCommandBufferBeginInfo begin_info;
+  VkClearValue clear_value;
+  VkRenderPassBeginInfo render_pass_info;
+  VkResult err;
+  begin_info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+  begin_info.pNext = NULL;
+  begin_info.flags = 0;
+  begin_info.pInheritanceInfo = NULL;
+  err = vkBeginCommandBuffer(command_buffer, &begin_info);
+  ASSERT_VK_RESULT(err, "begining command buffer");
+
+  assert(vk_globals.surface_format.format == VK_FORMAT_B8G8R8A8_UNORM);
+  clear_value.color.float32[0] = 128.0f / 255.0f;
+  clear_value.color.float32[1] = 218.0f / 255.0f;
+  clear_value.color.float32[2] = 251.0f / 255.0f;
+  clear_value.color.float32[3] = 1.0f;
+  clear_value.depthStencil.depth = 0.0f;
+  clear_value.depthStencil.stencil = 0;
+
+  render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+  render_pass_info.pNext = NULL;
+  render_pass_info.renderPass = vk_globals.render_pass;
+  render_pass_info.framebuffer = swapchain_framebuffers[swap_index];
+  render_pass_info.renderArea.offset.x = 0;
+  render_pass_info.renderArea.offset.y = 0;
+  render_pass_info.renderArea.extent = vk_globals.swapchain_extent;
+  render_pass_info.clearValueCount = 1;
+  render_pass_info.pClearValues = &clear_value;
+  vkCmdBeginRenderPass(command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
+  vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, vk_globals.pipeline);
+  vkCmdDraw(command_buffer, 3, 1, 0, 0);
+  vkCmdEndRenderPass(command_buffer);
+  err = vkEndCommandBuffer(command_buffer);
+  ASSERT_VK_RESULT(err, "recording command buffer");
+}
+
+void
+record_command_buffers(void)
+{
+  int i;
+  for (i = 0; i < swapchain_image_count; i++)
+    record_command_buffer(command_buffers[i], i);
+}
+
 void
 init_video(GLFWwindow *window)
 {
@@ -444,6 +525,8 @@ init_video(GLFWwindow *window)
   create_swapchain();
   init_render_passes();
   init_framebuffers();
+  create_graphics_command_pool();
+  allocate_command_buffers();
 }
 
 void
@@ -451,6 +534,8 @@ destroy_video(void)
 {
   PFN_vkDestroyDebugUtilsMessengerEXT debug_messenger_destroy_func;
   int i;
+
+  vkDestroyCommandPool(vk_globals.device, graphics_command_pool, NULL);
 
   for (i = 0; i < swapchain_image_count; i++)
     vkDestroyFramebuffer(vk_globals.device, swapchain_framebuffers[i], NULL);
