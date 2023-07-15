@@ -35,7 +35,6 @@ static VkSurfaceKHR surface;
 static VkSurfaceCapabilitiesKHR surface_capabilities;
 static VkPhysicalDevice physical_device;
 static VkPhysicalDeviceProperties physical_device_properties;
-static VkSurfaceFormatKHR surface_format;
 static VkPresentModeKHR present_mode;
 static VkSwapchainKHR swapchain;
 static uint32_t swapchain_image_count;
@@ -294,8 +293,8 @@ create_swapchain(void)
     create_info.minImageCount = surface_capabilities.minImageCount;
   else
     create_info.minImageCount = surface_capabilities.minImageCount + 1;
-  create_info.imageFormat = surface_format.format;
-  create_info.imageColorSpace = surface_format.colorSpace;
+  create_info.imageFormat = vk_globals.surface_format.format;
+  create_info.imageColorSpace = vk_globals.surface_format.colorSpace;
   if (surface_capabilities.currentExtent.width == 0xffffffff) {
     create_info.imageExtent.width = 500;
     create_info.imageExtent.height = 500;
@@ -329,7 +328,7 @@ create_swapchain(void)
   view_create_info.pNext = NULL;
   view_create_info.flags = 0;
   view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-  view_create_info.format = surface_format.format;
+  view_create_info.format = vk_globals.surface_format.format;
   view_create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
   view_create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
   view_create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -373,8 +372,8 @@ init_video(GLFWwindow *window)
   select_queue_family();
   init_device();
   /* TODO: check surface format and present mode are supported. */
-  surface_format.format = VK_FORMAT_B8G8R8A8_UNORM;
-  surface_format.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+  vk_globals.surface_format.format = VK_FORMAT_B8G8R8A8_UNORM;
+  vk_globals.surface_format.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
   present_mode = VK_PRESENT_MODE_FIFO_KHR;
   create_swapchain();
 }

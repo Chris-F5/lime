@@ -28,10 +28,13 @@ main(int argc, char **argv)
   window = glfwCreateWindow(WIDTH, HEIGHT, "lime demo", NULL, NULL);
 
   init_video(window);
+  init_render_passes();
   printf("hello world\n");
 
   while (!glfwWindowShouldClose(window))
     glfwPollEvents();
+
+  destroy_render_passes();
   destroy_video();
   return 0;
 }
