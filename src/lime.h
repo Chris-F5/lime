@@ -21,7 +21,6 @@ struct vk_globals {
   VkExtent2D swapchain_extent;
   VkDevice device;
   VkQueue graphics_queue;
-
   VkRenderPass render_pass;
 
   VkPipelineLayout pipeline_layout;
@@ -33,10 +32,6 @@ extern struct vk_globals vk_globals;
 /* video.c */
 void init_video(GLFWwindow *window);
 void destroy_video(void);
-
-/* render_passes.c */
-void init_render_passes(void);
-void destroy_render_passes(void);
 
 /* pipelines.c */
 void init_pipeline_layouts(void);

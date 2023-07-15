@@ -23,6 +23,8 @@ static void select_physical_device(void);
 static void select_queue_family(void);
 static void init_device(void);
 static void create_swapchain(void);
+static void init_render_passes(void);
+static void init_framebuffers(void);
 
 static const char *VALIDATION_LAYER = "VK_LAYER_KHRONOS_validation";
 static const char * const EXTENSIONS[] = {
@@ -40,6 +42,7 @@ static VkSwapchainKHR swapchain;
 static uint32_t swapchain_image_count;
 static VkImage swapchain_images[MAX_SWAPCHAIN_IMAGES];
 static VkImageView swapchain_image_views[MAX_SWAPCHAIN_IMAGES];
+static VkFramebuffer swapchain_framebuffers[MAX_SWAPCHAIN_IMAGES];
 
 static int
 check_validation_layer_support(void)
@@ -348,12 +351,73 @@ create_swapchain(void)
 }
 
 static void
-destroy_swapchain(void)
+init_render_passes(void)
 {
+  VkAttachmentDescription attachments[1];
+  VkAttachmentReference color_attachments[1];
+  VkSubpassDescription subpass;
+  VkRenderPassCreateInfo create_info;
+  VkResult err;
+
+  attachments[0].flags = 0;
+  attachments[0].format = vk_globals.surface_format.format;
+  attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+  attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+  color_attachments[0].attachment = 0;
+  color_attachments[0].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+  subpass.flags = 0;
+  subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+  subpass.inputAttachmentCount = 0;
+  subpass.pInputAttachments = NULL;
+  subpass.colorAttachmentCount = sizeof(color_attachments) / sizeof(color_attachments[0]);
+  subpass.pColorAttachments = color_attachments;
+  subpass.pResolveAttachments = NULL;
+  subpass.pDepthStencilAttachment = NULL;
+  subpass.preserveAttachmentCount = 0;
+  subpass.pPreserveAttachments = NULL;
+
+  create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  create_info.pNext = NULL;
+  create_info.flags = 0;
+  create_info.attachmentCount = sizeof(attachments) / sizeof(attachments[0]);
+  create_info.pAttachments = attachments;
+  create_info.subpassCount = 1;
+  create_info.pSubpasses = &subpass;
+  create_info.dependencyCount = 0;
+  create_info.pDependencies = NULL;
+  assert(vk_globals.render_pass == VK_NULL_HANDLE);
+  err = vkCreateRenderPass(vk_globals.device, &create_info, NULL, &vk_globals.render_pass);
+  ASSERT_VK_RESULT(err, "creating render pass");
+}
+
+static void
+init_framebuffers(void)
+{
+  VkFramebufferCreateInfo create_info;
   int i;
-  for (i = 0; i < swapchain_image_count; i++)
-    vkDestroyImageView(vk_globals.device, swapchain_image_views[i], NULL);
-  vkDestroySwapchainKHR(vk_globals.device, swapchain, NULL);
+  VkResult err;
+
+  create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
+  create_info.pNext = NULL;
+  create_info.flags = 0;
+  create_info.renderPass = vk_globals.render_pass;
+  create_info.attachmentCount = 1;
+  create_info.width = vk_globals.swapchain_extent.width;
+  create_info.height = vk_globals.swapchain_extent.height;
+  create_info.layers = 1;
+  for (i = 0; i < swapchain_image_count; i++) {
+    create_info.pAttachments = &swapchain_image_views[i];
+    assert(swapchain_framebuffers[i] == VK_NULL_HANDLE);
+    err = vkCreateFramebuffer(vk_globals.device, &create_info, NULL, &swapchain_framebuffers[i]);
+    ASSERT_VK_RESULT(err, "creating swapcahin framebuffer");
+  }
 }
 
 void
@@ -378,13 +442,24 @@ init_video(GLFWwindow *window)
   vk_globals.surface_format.colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
   present_mode = VK_PRESENT_MODE_FIFO_KHR;
   create_swapchain();
+  init_render_passes();
+  init_framebuffers();
 }
 
 void
 destroy_video(void)
 {
   PFN_vkDestroyDebugUtilsMessengerEXT debug_messenger_destroy_func;
-  destroy_swapchain();
+  int i;
+
+  for (i = 0; i < swapchain_image_count; i++)
+    vkDestroyFramebuffer(vk_globals.device, swapchain_framebuffers[i], NULL);
+
+  vkDestroyRenderPass(vk_globals.device, vk_globals.render_pass, NULL);
+  for (i = 0; i < swapchain_image_count; i++)
+    vkDestroyImageView(vk_globals.device, swapchain_image_views[i], NULL);
+  vkDestroySwapchainKHR(vk_globals.device, swapchain, NULL);
+
   vkDestroyDevice(vk_globals.device, NULL);
   vkDestroySurfaceKHR(instance, surface, NULL);
   if (debug_messenger != VK_NULL_HANDLE) {

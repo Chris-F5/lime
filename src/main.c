@@ -28,7 +28,6 @@ main(int argc, char **argv)
   window = glfwCreateWindow(WIDTH, HEIGHT, "lime demo", NULL, NULL);
 
   init_video(window);
-  init_render_passes();
   init_pipeline_layouts();
   init_shader_modules();
   create_pipelines();
@@ -40,7 +39,6 @@ main(int argc, char **argv)
   destroy_pipelines();
   destroy_shader_modules();
   destroy_pipeline_layouts();
-  destroy_render_passes();
   destroy_video();
   return 0;
 }
