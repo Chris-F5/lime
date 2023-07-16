@@ -6,13 +6,74 @@
 #include "lime.h"
 #include "utils.h"
 
+static void create_render_pass(void);
+static void create_pipeline_layout(void);
 static VkShaderModule create_shader_module(const char *file_name);
+static void create_pipeline(void);
 
 static VkShaderModule hello_vert_module;
 static VkShaderModule hello_frag_module;
 
-void
-init_pipeline_layouts(void)
+struct lime_pipelines lime_pipelines;
+
+static void
+create_render_pass(void)
+{
+  VkAttachmentDescription attachments[1];
+  VkAttachmentReference color_attachments[1];
+  VkSubpassDependency subpass_dependencies[1];
+  VkSubpassDescription subpass;
+  VkRenderPassCreateInfo create_info;
+  VkResult err;
+
+  attachments[0].flags = 0;
+  attachments[0].format = lime_device.surface_format;
+  attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+  attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+  color_attachments[0].attachment = 0;
+  color_attachments[0].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
+  subpass_dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+  subpass_dependencies[0].dstSubpass = 0;
+  subpass_dependencies[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  subpass_dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  subpass_dependencies[0].srcAccessMask = 0;
+  subpass_dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  subpass_dependencies[0].dependencyFlags = 0;
+
+  subpass.flags = 0;
+  subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+  subpass.inputAttachmentCount = 0;
+  subpass.pInputAttachments = NULL;
+  subpass.colorAttachmentCount = sizeof(color_attachments) / sizeof(color_attachments[0]);
+  subpass.pColorAttachments = color_attachments;
+  subpass.pResolveAttachments = NULL;
+  subpass.pDepthStencilAttachment = NULL;
+  subpass.preserveAttachmentCount = 0;
+  subpass.pPreserveAttachments = NULL;
+
+  create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  create_info.pNext = NULL;
+  create_info.flags = 0;
+  create_info.attachmentCount = sizeof(attachments) / sizeof(attachments[0]);
+  create_info.pAttachments = attachments;
+  create_info.subpassCount = 1;
+  create_info.pSubpasses = &subpass;
+  create_info.dependencyCount = sizeof(subpass_dependencies) / sizeof(subpass_dependencies[0]);
+  create_info.pDependencies = subpass_dependencies;
+  assert(lime_pipelines.render_pass == VK_NULL_HANDLE);
+  err = vkCreateRenderPass(lime_device.device, &create_info, NULL, &lime_pipelines.render_pass);
+  ASSERT_VK_RESULT(err, "creating render pass");
+}
+
+static void
+create_pipeline_layout(void)
 {
   VkPipelineLayoutCreateInfo create_info;
   VkResult err;
@@ -23,15 +84,10 @@ init_pipeline_layouts(void)
   create_info.pSetLayouts = NULL;
   create_info.pushConstantRangeCount = 0;
   create_info.pPushConstantRanges = NULL;
-  assert(vk_globals.pipeline_layout == VK_NULL_HANDLE);
-  err = vkCreatePipelineLayout(vk_globals.device, &create_info, NULL, &vk_globals.pipeline_layout);
+  assert(lime_pipelines.pipeline_layout == VK_NULL_HANDLE);
+  err = vkCreatePipelineLayout(lime_device.device, &create_info, NULL,
+      &lime_pipelines.pipeline_layout);
   ASSERT_VK_RESULT(err, "creating pipeline layout");
-}
-
-void
-destroy_pipeline_layouts(void)
-{
-  vkDestroyPipelineLayout(vk_globals.device, vk_globals.pipeline_layout, NULL);
 }
 
 static VkShaderModule
@@ -62,39 +118,25 @@ create_shader_module(const char *file_name)
   create_info.flags = 0;
   create_info.codeSize = spv_length;
   create_info.pCode = (uint32_t *)spv;
-  err = vkCreateShaderModule(vk_globals.device, &create_info, NULL, &module);
+  err = vkCreateShaderModule(lime_device.device, &create_info, NULL, &module);
   ASSERT_VK_RESULT(err, "creating shader module");
   free(spv);
   return module;
 }
 
-void
-init_shader_modules(void)
-{
-  hello_vert_module = create_shader_module("hello.vert.spv");
-  hello_frag_module = create_shader_module("hello.frag.spv");
-}
-
-void
-destroy_shader_modules(void)
-{
-  vkDestroyShaderModule(vk_globals.device, hello_vert_module, NULL);
-  vkDestroyShaderModule(vk_globals.device, hello_frag_module, NULL);
-}
-
-void
-create_pipelines(void)
+static void
+create_pipeline(void)
 {
   VkPipelineShaderStageCreateInfo shader_stages[2];
   VkPipelineVertexInputStateCreateInfo vertex_input;
   VkPipelineInputAssemblyStateCreateInfo input_assembly;
-  VkViewport viewport;
-  VkRect2D scissor;
   VkPipelineViewportStateCreateInfo viewport_state;
   VkPipelineRasterizationStateCreateInfo rasterization;
   VkPipelineMultisampleStateCreateInfo multisample;
   VkPipelineColorBlendAttachmentState color_blend_attachments[1];
   VkPipelineColorBlendStateCreateInfo color_blend;
+  VkDynamicState dynamic_states[2];
+  VkPipelineDynamicStateCreateInfo dynamic_state;
   VkGraphicsPipelineCreateInfo create_info;
   VkResult err;
 
@@ -127,23 +169,13 @@ create_pipelines(void)
   input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
   input_assembly.primitiveRestartEnable = VK_FALSE;
 
-  /* TODO: Make viewport size dynamic state, see vulkan tutorial. */
-  viewport.x = viewport.y = 0.0f;
-  viewport.width = vk_globals.swapchain_extent.width;
-  viewport.height = vk_globals.swapchain_extent.height;
-  viewport.minDepth = 0.0f;
-  viewport.maxDepth = 1.0f;
-
-  scissor.offset.x = scissor.offset.y = 0;
-  scissor.extent = vk_globals.swapchain_extent;
-
   viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
   viewport_state.pNext = NULL;
   viewport_state.flags = 0;
   viewport_state.viewportCount = 1;
-  viewport_state.pViewports = &viewport;
+  viewport_state.pViewports = NULL;
   viewport_state.scissorCount = 1;
-  viewport_state.pScissors = &scissor;
+  viewport_state.pScissors = NULL;
 
   rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
   rasterization.pNext = NULL;
@@ -194,6 +226,14 @@ create_pipelines(void)
   color_blend.blendConstants[2] = 0.0f;
   color_blend.blendConstants[3] = 0.0f;
 
+  dynamic_states[0] = VK_DYNAMIC_STATE_VIEWPORT;
+  dynamic_states[1] = VK_DYNAMIC_STATE_SCISSOR;
+  dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+  dynamic_state.pNext = NULL;
+  dynamic_state.flags = 0;
+  dynamic_state.dynamicStateCount = sizeof(dynamic_states) / sizeof(dynamic_states[0]);
+  dynamic_state.pDynamicStates = dynamic_states;
+
   create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
   create_info.pNext = NULL;
   create_info.flags = 0;
@@ -207,21 +247,35 @@ create_pipelines(void)
   create_info.pMultisampleState = &multisample;
   create_info.pDepthStencilState = NULL;
   create_info.pColorBlendState = &color_blend;
-  create_info.pDynamicState = NULL;
-  create_info.layout = vk_globals.pipeline_layout;
-  create_info.renderPass = vk_globals.render_pass;
+  create_info.pDynamicState = &dynamic_state;
+  create_info.layout = lime_pipelines.pipeline_layout;
+  create_info.renderPass = lime_pipelines.render_pass;
   create_info.subpass = 0;
   create_info.basePipelineHandle = VK_NULL_HANDLE;
   create_info.basePipelineIndex = 0;
 
-  assert(vk_globals.pipeline == VK_NULL_HANDLE);
-  err = vkCreateGraphicsPipelines(vk_globals.device, VK_NULL_HANDLE, 1,
-      &create_info, NULL, &vk_globals.pipeline);
+  assert(lime_pipelines.pipeline == VK_NULL_HANDLE);
+  err = vkCreateGraphicsPipelines(lime_device.device, VK_NULL_HANDLE, 1,
+      &create_info, NULL, &lime_pipelines.pipeline);
   ASSERT_VK_RESULT(err, "creating graphics pipelin");
 }
 
 void
-destroy_pipelines(void)
+lime_init_pipelines(void)
 {
-  vkDestroyPipeline(vk_globals.device, vk_globals.pipeline, NULL);
+  create_render_pass();
+  create_pipeline_layout();
+  hello_vert_module = create_shader_module("hello.vert.spv");
+  hello_frag_module = create_shader_module("hello.frag.spv");
+  create_pipeline();
+}
+
+void
+lime_destroy_pipelines(void)
+{
+  vkDestroyPipeline(lime_device.device, lime_pipelines.pipeline, NULL);
+  vkDestroyShaderModule(lime_device.device, hello_vert_module, NULL);
+  vkDestroyShaderModule(lime_device.device, hello_frag_module, NULL);
+  vkDestroyPipelineLayout(lime_device.device, lime_pipelines.pipeline_layout, NULL);
+  vkDestroyRenderPass(lime_device.device, lime_pipelines.render_pass, NULL);
 }

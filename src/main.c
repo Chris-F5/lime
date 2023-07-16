@@ -27,21 +27,18 @@ main(int argc, char **argv)
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
   window = glfwCreateWindow(WIDTH, HEIGHT, "lime demo", NULL, NULL);
 
-  init_video(window);
-  init_pipeline_layouts();
-  init_shader_modules();
-  create_pipelines();
-  record_command_buffers();
+  lime_init_device(window);
+  lime_init_pipelines();
+  lime_init_renderer();
   printf("hello world\n");
 
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
-    draw_frame();
+    lime_draw_frame();
   }
-  vkDeviceWaitIdle(vk_globals.device);
-  destroy_pipelines();
-  destroy_shader_modules();
-  destroy_pipeline_layouts();
-  destroy_video();
+  vkDeviceWaitIdle(lime_device.device);
+  lime_destroy_renderer();
+  lime_destroy_pipelines();
+  lime_destroy_device();
   return 0;
 }

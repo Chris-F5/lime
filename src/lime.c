@@ -3,8 +3,6 @@
 #include <GLFW/glfw3.h>
 #include "lime.h"
 
-struct vk_globals vk_globals;
-
 char *
 vkresult_to_string(VkResult result)
 {

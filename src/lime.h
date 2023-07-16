@@ -15,33 +15,37 @@
   exit(1); \
 }
 
-struct vk_globals {
+struct lime_device {
+  VkSurfaceKHR surface;
   uint32_t graphics_family_index;
-  VkSurfaceFormatKHR surface_format;
-  VkExtent2D swapchain_extent;
   VkDevice device;
   VkQueue graphics_queue;
-  VkRenderPass render_pass;
+  VkFormat surface_format;
+  VkPresentModeKHR present_mode;
+};
 
+struct lime_pipelines {
+  VkRenderPass render_pass;
   VkPipelineLayout pipeline_layout;
   VkPipeline pipeline;
 };
 
-extern struct vk_globals vk_globals;
+extern struct lime_device lime_device;
+extern struct lime_pipelines lime_pipelines;
 
-/* video.c */
-void init_video(GLFWwindow *window);
-void record_command_buffers(void);
-void draw_frame(void);
-void destroy_video(void);
+/* device.c */
+void lime_init_device(GLFWwindow *window);
+VkSurfaceCapabilitiesKHR lime_get_current_surface_capabilities(void);
+void lime_destroy_device(void);
 
 /* pipelines.c */
-void init_pipeline_layouts(void);
-void destroy_pipeline_layouts(void);
-void init_shader_modules(void);
-void destroy_shader_modules(void);
-void create_pipelines(void);
-void destroy_pipelines(void);
+void lime_init_pipelines(void);
+void lime_destroy_pipelines(void);
+
+/* renderer.c */
+void lime_init_renderer(void);
+void lime_draw_frame(void);
+void lime_destroy_renderer(void);
 
 /* lime.c */
 char *vkresult_to_string(VkResult result);
