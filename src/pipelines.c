@@ -7,6 +7,7 @@
 #include "utils.h"
 
 static void create_render_pass(void);
+static void create_descriptor_set_layouts(void);
 static void create_pipeline_layout(void);
 static VkShaderModule create_shader_module(const char *file_name);
 static void create_pipeline(void);
@@ -73,6 +74,32 @@ create_render_pass(void)
 }
 
 static void
+create_descriptor_set_layouts(void)
+{
+  VkDescriptorSetLayoutBinding bindings[1];
+  VkDescriptorSetLayoutCreateInfo create_info;
+  VkResult err;
+
+  bindings[0].binding = 0;
+  bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  bindings[0].descriptorCount = 1;
+  bindings[0].stageFlags
+    = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+  bindings[0].pImmutableSamplers = NULL;
+
+  create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  create_info.pNext = NULL;
+  create_info.flags = 0;
+  create_info.bindingCount = 1;
+  create_info.pBindings = bindings;
+
+  assert(lime_pipelines.camera_descriptor_set_layout == VK_NULL_HANDLE);
+  err = vkCreateDescriptorSetLayout(lime_device.device, &create_info, NULL,
+      &lime_pipelines.camera_descriptor_set_layout);
+  ASSERT_VK_RESULT(err, "creating camera descriptor set layout");
+}
+
+static void
 create_pipeline_layout(void)
 {
   VkPipelineLayoutCreateInfo create_info;
@@ -80,8 +107,8 @@ create_pipeline_layout(void)
   create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   create_info.pNext = NULL;
   create_info.flags = 0;
-  create_info.setLayoutCount = 0;
-  create_info.pSetLayouts = NULL;
+  create_info.setLayoutCount = 1;
+  create_info.pSetLayouts = &lime_pipelines.camera_descriptor_set_layout;
   create_info.pushConstantRangeCount = 0;
   create_info.pPushConstantRanges = NULL;
   assert(lime_pipelines.pipeline_layout == VK_NULL_HANDLE);
@@ -264,6 +291,7 @@ void
 lime_init_pipelines(void)
 {
   create_render_pass();
+  create_descriptor_set_layouts();
   create_pipeline_layout();
   hello_vert_module = create_shader_module("hello.vert.spv");
   hello_frag_module = create_shader_module("hello.frag.spv");
@@ -277,5 +305,7 @@ lime_destroy_pipelines(void)
   vkDestroyShaderModule(lime_device.device, hello_vert_module, NULL);
   vkDestroyShaderModule(lime_device.device, hello_frag_module, NULL);
   vkDestroyPipelineLayout(lime_device.device, lime_pipelines.pipeline_layout, NULL);
+  vkDestroyDescriptorSetLayout(lime_device.device,
+      lime_pipelines.camera_descriptor_set_layout, NULL);
   vkDestroyRenderPass(lime_device.device, lime_pipelines.render_pass, NULL);
 }

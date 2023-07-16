@@ -29,6 +29,7 @@ static VkInstance instance;
 static VkDebugUtilsMessengerEXT debug_messenger;
 static VkPhysicalDevice physical_device;
 static VkPhysicalDeviceProperties physical_device_properties;
+static VkPhysicalDeviceMemoryProperties memory_properties;
 
 struct lime_device lime_device;
 
@@ -202,6 +203,7 @@ select_physical_device(void)
   assert(physical_device == VK_NULL_HANDLE);
   physical_device = physical_devices[0];
   vkGetPhysicalDeviceProperties(physical_device, &physical_device_properties);
+  vkGetPhysicalDeviceMemoryProperties(physical_device, &memory_properties);
   if (!check_physical_device_extension_support(physical_device)) {
     fprintf(stderr, "Physical device does not support required extensions.\n");
     exit(1);
@@ -304,6 +306,18 @@ lime_get_current_surface_capabilities(void)
   VkSurfaceCapabilitiesKHR surface_capabilities;
   vkGetPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, lime_device.surface, &surface_capabilities);
   return surface_capabilities;
+}
+
+uint32_t
+lime_device_find_memory_type(uint32_t memory_type_bits, VkMemoryPropertyFlags properties)
+{
+  int i;
+  for (i = 0; i < memory_properties.memoryTypeCount; i++)
+    if (memory_type_bits & (1 << i)
+        && (memory_properties.memoryTypes[i].propertyFlags & properties) == properties)
+      return i;
+  fprintf(stderr, "Failed to find suitable memory type.\n");
+  exit(1);
 }
 
 void

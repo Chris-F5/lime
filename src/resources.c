@@ -8,9 +8,13 @@
 
 static void create_swapchain(VkSurfaceCapabilitiesKHR surface_capabilities);
 static void create_framebuffers(void);
+static void allocate_buffers(void);
 
 static VkImage swapchain_images[MAX_SWAPCHAIN_IMAGES];
 static VkImageView swapchain_image_views[MAX_SWAPCHAIN_IMAGES];
+static VkBuffer camera_uniform_buffer;
+static VkDeviceMemory camera_uniform_buffer_memory;
+static VkDescriptorPool descriptor_pool;
 
 struct lime_resources lime_resources;
 
@@ -109,6 +113,42 @@ create_framebuffers(void)
   }
 }
 
+static void
+allocate_buffers(void)
+{
+  VkBufferCreateInfo create_info;
+  VkMemoryRequirements memory_requirements;
+  VkMemoryAllocateInfo allocate_info;
+  VkResult err;
+
+  create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
+  create_info.pNext = NULL;
+  create_info.flags = 0;
+  create_info.size = MAX_SWAPCHAIN_IMAGES * sizeof(struct camera_uniform_data);
+  create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
+  create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  create_info.queueFamilyIndexCount = 0;
+  create_info.pQueueFamilyIndices = NULL;
+  assert(camera_uniform_buffer == VK_NULL_HANDLE);
+  err = vkCreateBuffer(lime_device.device, &create_info, NULL, &camera_uniform_buffer);
+  ASSERT_VK_RESULT(err, "creating camera uniform buffer");
+
+  vkGetBufferMemoryRequirements(lime_device.device, camera_uniform_buffer,
+      &memory_requirements);
+  allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocate_info.pNext = NULL;
+  allocate_info.allocationSize = memory_requirements.size;
+  allocate_info.memoryTypeIndex = lime_device_find_memory_type(
+      memory_requirements.memoryTypeBits,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  assert(camera_uniform_buffer_memory == VK_NULL_HANDLE);
+  err = vkAllocateMemory(lime_device.device, &allocate_info, NULL,
+      &camera_uniform_buffer_memory);
+  ASSERT_VK_RESULT(err, "allocating camera uniform buffer memory");
+  err = vkBindBufferMemory(lime_device.device, camera_uniform_buffer,
+      camera_uniform_buffer_memory, 0);
+}
+
 void
 lime_init_resources(void)
 {
@@ -116,12 +156,15 @@ lime_init_resources(void)
   surface_capabilities = lime_get_current_surface_capabilities();
   create_swapchain(surface_capabilities);
   create_framebuffers();
+  allocate_buffers();
 }
 
 void
 lime_destroy_resources(void)
 {
   int i;
+  vkDestroyBuffer(lime_device.device, camera_uniform_buffer, NULL);
+  vkFreeMemory(lime_device.device, camera_uniform_buffer_memory, NULL);
   for (i = 0; i < lime_resources.swapchain_image_count; i++) {
     vkDestroyFramebuffer(lime_device.device, lime_resources.swapchain_framebuffers[i], NULL);
     vkDestroyImageView(lime_device.device, swapchain_image_views[i], NULL);
