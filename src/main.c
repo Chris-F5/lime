@@ -29,6 +29,7 @@ main(int argc, char **argv)
 
   lime_init_device(window);
   lime_init_pipelines();
+  lime_init_resources();
   lime_init_renderer();
   printf("hello world\n");
 
@@ -38,6 +39,7 @@ main(int argc, char **argv)
   }
   vkDeviceWaitIdle(lime_device.device);
   lime_destroy_renderer();
+  lime_destroy_resources();
   lime_destroy_pipelines();
   lime_destroy_device();
   return 0;
