@@ -23,6 +23,7 @@ struct camera_uniform_data {
 
 struct lime_device {
   VkSurfaceKHR surface;
+  VkPhysicalDeviceProperties properties;
   uint32_t graphics_family_index;
   VkDevice device;
   VkQueue graphics_queue;

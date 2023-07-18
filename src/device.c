@@ -28,7 +28,6 @@ static const char * const EXTENSIONS[] = {
 static VkInstance instance;
 static VkDebugUtilsMessengerEXT debug_messenger;
 static VkPhysicalDevice physical_device;
-static VkPhysicalDeviceProperties physical_device_properties;
 static VkPhysicalDeviceMemoryProperties memory_properties;
 
 struct lime_device lime_device;
@@ -202,7 +201,7 @@ select_physical_device(void)
   }
   assert(physical_device == VK_NULL_HANDLE);
   physical_device = physical_devices[0];
-  vkGetPhysicalDeviceProperties(physical_device, &physical_device_properties);
+  vkGetPhysicalDeviceProperties(physical_device, &lime_device.properties);
   vkGetPhysicalDeviceMemoryProperties(physical_device, &memory_properties);
   if (!check_physical_device_extension_support(physical_device)) {
     fprintf(stderr, "Physical device does not support required extensions.\n");

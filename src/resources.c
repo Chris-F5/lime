@@ -9,9 +9,13 @@
 static void create_swapchain(VkSurfaceCapabilitiesKHR surface_capabilities);
 static void create_framebuffers(void);
 static void allocate_buffers(void);
+static void create_descriptor_pool(void);
+static void allocate_descriptor_sets(void);
+static void bind_descriptor_sets(void);
 
 static VkImage swapchain_images[MAX_SWAPCHAIN_IMAGES];
 static VkImageView swapchain_image_views[MAX_SWAPCHAIN_IMAGES];
+static int camera_uniform_buffer_step;
 static VkBuffer camera_uniform_buffer;
 static VkDeviceMemory camera_uniform_buffer_memory;
 static VkDescriptorPool descriptor_pool;
@@ -121,10 +125,16 @@ allocate_buffers(void)
   VkMemoryAllocateInfo allocate_info;
   VkResult err;
 
+  camera_uniform_buffer_step
+    = (sizeof(struct camera_uniform_data) 
+        / lime_device.properties.limits.minUniformBufferOffsetAlignment)
+    * lime_device.properties.limits.minUniformBufferOffsetAlignment
+    + lime_device.properties.limits.minUniformBufferOffsetAlignment;
+
   create_info.sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO;
   create_info.pNext = NULL;
   create_info.flags = 0;
-  create_info.size = MAX_SWAPCHAIN_IMAGES * sizeof(struct camera_uniform_data);
+  create_info.size = MAX_SWAPCHAIN_IMAGES * camera_uniform_buffer_step;
   create_info.usage = VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT;
   create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
   create_info.queueFamilyIndexCount = 0;
@@ -149,6 +159,69 @@ allocate_buffers(void)
       camera_uniform_buffer_memory, 0);
 }
 
+static void
+create_descriptor_pool(void)
+{
+  VkDescriptorPoolSize pool_sizes[1];
+  VkDescriptorPoolCreateInfo create_info;
+  VkResult err;
+
+  pool_sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  pool_sizes[0].descriptorCount = MAX_SWAPCHAIN_IMAGES;
+  create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+  create_info.pNext = NULL;
+  create_info.flags = 0;
+  create_info.maxSets = MAX_SWAPCHAIN_IMAGES;
+  create_info.poolSizeCount = sizeof(pool_sizes) / sizeof(pool_sizes[0]);
+  create_info.pPoolSizes = pool_sizes;
+  err = vkCreateDescriptorPool(lime_device.device, &create_info, NULL, &descriptor_pool);
+  ASSERT_VK_RESULT(err, "creating descriptor pool");
+}
+
+static void
+allocate_descriptor_sets(void)
+{
+  int i;
+  VkDescriptorSetLayout layout_copies[MAX_SWAPCHAIN_IMAGES];
+  VkDescriptorSetAllocateInfo allocate_info;
+  VkResult err;
+  for (i = 0; i < MAX_SWAPCHAIN_IMAGES; i++)
+    layout_copies[i] = lime_pipelines.camera_descriptor_set_layout;
+  allocate_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  allocate_info.pNext = NULL;
+  allocate_info.descriptorPool = descriptor_pool;
+  allocate_info.descriptorSetCount = MAX_SWAPCHAIN_IMAGES;
+  allocate_info.pSetLayouts = layout_copies;
+  assert(lime_resources.camera_descriptor_sets[0] == VK_NULL_HANDLE);
+  err = vkAllocateDescriptorSets(lime_device.device, &allocate_info,
+      lime_resources.camera_descriptor_sets);
+  ASSERT_VK_RESULT(err, "allocating descriptor sets");
+}
+
+static void
+bind_descriptor_sets(void)
+{
+  int i;
+  VkDescriptorBufferInfo buffer_info;
+  VkWriteDescriptorSet write;
+  buffer_info.buffer = camera_uniform_buffer;
+  write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  write.pNext = NULL;
+  write.dstBinding = 0;
+  write.dstArrayElement = 0;
+  write.descriptorCount = 1;
+  write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  write.pImageInfo = NULL;
+  write.pBufferInfo = &buffer_info;
+  write.pTexelBufferView = NULL;
+  for (i = 0; i < MAX_SWAPCHAIN_IMAGES; i++) {
+    buffer_info.offset = i * camera_uniform_buffer_step;
+    buffer_info.range = sizeof(struct camera_uniform_data);
+    write.dstSet = lime_resources.camera_descriptor_sets[i];
+    vkUpdateDescriptorSets(lime_device.device, 1, &write, 0, NULL);
+  }
+}
+
 void
 lime_init_resources(void)
 {
@@ -157,12 +230,16 @@ lime_init_resources(void)
   create_swapchain(surface_capabilities);
   create_framebuffers();
   allocate_buffers();
+  create_descriptor_pool();
+  allocate_descriptor_sets();
+  bind_descriptor_sets();
 }
 
 void
 lime_destroy_resources(void)
 {
   int i;
+  vkDestroyDescriptorPool(lime_device.device, descriptor_pool, NULL);
   vkDestroyBuffer(lime_device.device, camera_uniform_buffer, NULL);
   vkFreeMemory(lime_device.device, camera_uniform_buffer_memory, NULL);
   for (i = 0; i < lime_resources.swapchain_image_count; i++) {
