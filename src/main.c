@@ -20,6 +20,7 @@ int
 main(int argc, char **argv)
 {
   GLFWwindow *window;
+  struct camera_uniform_data camera;
 
   glfwSetErrorCallback(glfw_error_callback);
   glfwInit();
@@ -35,7 +36,8 @@ main(int argc, char **argv)
 
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
-    lime_draw_frame();
+    lime_draw_frame(camera);
+    camera.color = (camera.color + 1) % 256;
   }
   vkDeviceWaitIdle(lime_device.device);
   lime_destroy_renderer();

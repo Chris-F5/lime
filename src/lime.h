@@ -18,7 +18,7 @@
 #define MAX_SWAPCHAIN_IMAGES 8
 
 struct camera_uniform_data {
-  int _;
+  int color;
 };
 
 struct lime_device {
@@ -63,11 +63,12 @@ void lime_destroy_pipelines(void);
 
 /* resources.c */
 void lime_init_resources(void);
+void set_camera_uniform_data(int swap_index, struct camera_uniform_data data);
 void lime_destroy_resources(void);
 
 /* renderer.c */
 void lime_init_renderer(void);
-void lime_draw_frame(void);
+void lime_draw_frame(struct camera_uniform_data camera);
 void lime_destroy_renderer(void);
 
 /* lime_utils.c */

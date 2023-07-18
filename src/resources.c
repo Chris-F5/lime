@@ -236,6 +236,19 @@ lime_init_resources(void)
 }
 
 void
+set_camera_uniform_data(int swap_index, struct camera_uniform_data data)
+{
+  struct camera_uniform_data *mapped;
+  VkResult err;
+  err = vkMapMemory(lime_device.device, camera_uniform_buffer_memory,
+      swap_index * camera_uniform_buffer_step, sizeof(struct camera_uniform_data),
+      0, (void **)&mapped);
+  ASSERT_VK_RESULT(err, "mapping camera uniform buffer data");
+  *mapped = data;
+  vkUnmapMemory(lime_device.device, camera_uniform_buffer_memory);
+}
+
+void
 lime_destroy_resources(void)
 {
   int i;

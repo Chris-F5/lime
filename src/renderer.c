@@ -116,6 +116,9 @@ record_command_buffer(VkCommandBuffer command_buffer, int swap_index)
 
   vkCmdBeginRenderPass(command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
   vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lime_pipelines.pipeline);
+  vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+      lime_pipelines.pipeline_layout, 0, 1,
+      &lime_resources.camera_descriptor_sets[swap_index], 0, NULL);
   vkCmdSetViewport(command_buffer, 0, 1, &viewport);
   vkCmdSetScissor(command_buffer, 0, 1, &scissor);
   vkCmdDraw(command_buffer, 3, 1, 0, 0);
@@ -142,7 +145,7 @@ lime_init_renderer(void)
 }
 
 void
-lime_draw_frame(void)
+lime_draw_frame(struct camera_uniform_data camera)
 {
   uint32_t swapchain_index;
   VkSubmitInfo submit_info;
@@ -154,6 +157,7 @@ lime_draw_frame(void)
   err = vkAcquireNextImageKHR(lime_device.device, lime_resources.swapchain,
       UINT64_MAX, image_available_semaphore, VK_NULL_HANDLE, &swapchain_index);
   ASSERT_VK_RESULT(err, "acquiring next swapchain image");
+  set_camera_uniform_data(swapchain_index, camera);
   submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
   submit_info.pNext = NULL;
   submit_info.waitSemaphoreCount = 1;
