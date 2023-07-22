@@ -156,6 +156,8 @@ static void
 create_pipeline(void)
 {
   VkPipelineShaderStageCreateInfo shader_stages[2];
+  VkVertexInputBindingDescription vertex_input_bindings[2];
+  VkVertexInputAttributeDescription vertex_input_attributes[2];
   VkPipelineVertexInputStateCreateInfo vertex_input;
   VkPipelineInputAssemblyStateCreateInfo input_assembly;
   VkPipelineViewportStateCreateInfo viewport_state;
@@ -183,13 +185,28 @@ create_pipeline(void)
   shader_stages[1].pName = "main";
   shader_stages[1].pSpecializationInfo = NULL;
 
+  vertex_input_bindings[0].binding = 0;
+  vertex_input_bindings[0].stride = 4 * sizeof(float);
+  vertex_input_bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+  vertex_input_bindings[1].binding = 1;
+  vertex_input_bindings[1].stride = 4 * sizeof(float);
+  vertex_input_bindings[1].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+  vertex_input_attributes[0].location = 0;
+  vertex_input_attributes[0].binding = 0;
+  vertex_input_attributes[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+  vertex_input_attributes[0].offset = 0;
+  vertex_input_attributes[1].location = 1;
+  vertex_input_attributes[1].binding = 1;
+  vertex_input_attributes[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+  vertex_input_attributes[1].offset = 0;
+
   vertex_input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
   vertex_input.pNext = NULL;
   vertex_input.flags = 0;
-  vertex_input.vertexBindingDescriptionCount = 0;
-  vertex_input.pVertexBindingDescriptions = NULL;
-  vertex_input.vertexAttributeDescriptionCount = 0;
-  vertex_input.pVertexAttributeDescriptions = NULL;
+  vertex_input.vertexBindingDescriptionCount = sizeof(vertex_input_bindings) / sizeof(vertex_input_bindings[0]);
+  vertex_input.pVertexBindingDescriptions = vertex_input_bindings;
+  vertex_input.vertexAttributeDescriptionCount = sizeof(vertex_input_attributes) / sizeof(vertex_input_attributes[0]);
+  vertex_input.pVertexAttributeDescriptions = vertex_input_attributes;
 
   input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
   input_assembly.pNext = NULL;

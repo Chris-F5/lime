@@ -120,6 +120,9 @@ record_command_buffer(VkCommandBuffer command_buffer, int swap_index)
   vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
       lime_pipelines.pipeline_layout, 0, 1,
       &lime_resources.camera_descriptor_sets[swap_index], 0, NULL);
+  vkCmdBindVertexBuffers(command_buffer, 0,
+      sizeof(lime_resources.vertex_buffers) / sizeof(lime_resources.vertex_buffers[0]),
+      lime_resources.vertex_buffers, lime_resources.vertex_buffer_offsets);
   vkCmdSetViewport(command_buffer, 0, 1, &viewport);
   vkCmdSetScissor(command_buffer, 0, 1, &scissor);
   vkCmdDraw(command_buffer, 3, 1, 0, 0);

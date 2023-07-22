@@ -3,17 +3,16 @@
 layout(set = 0, binding = 0) uniform camera_uniform_buffer {
   mat4 view;
   mat4 proj;
-  int number;
 };
 
-vec3 hello_triangle[3] = vec3[] (
-  vec3(-0.5, 0.5, 5.0),
-  vec3(0.5, 0.5, 5.0),
-  vec3(0.0, -0.5, 5.0)
-);
+layout(location = 0) in vec4 in_position;
+layout(location = 1) in vec4 in_color;
+
+layout(location = 0) out vec4 out_color;
 
 void
 main()
 {
-  gl_Position = proj * view * vec4(hello_triangle[gl_VertexIndex], 1.0);
+  gl_Position = proj * view * in_position;
+  out_color = in_color;
 }

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <assert.h>
+#include <string.h>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 #include <vulkan/vulkan.h>
@@ -10,15 +11,28 @@
 static void create_swapchain(VkSurfaceCapabilitiesKHR surface_capabilities);
 static void create_framebuffers(void);
 static void allocate_buffers(void);
+static void fill_vertex_buffers(void);
 static void create_descriptor_pool(void);
 static void allocate_descriptor_sets(void);
 static void bind_descriptor_sets(void);
+
+static const float vertex_positions[] = {
+  -0.5f, 0.5f, 5.0f, 1.0f,
+  0.5f, 0.5f, 5.0f, 1.0f,
+  0.0f, -0.5f, 5.0f, 1.0f,
+};
+static const float vertex_colors[] = {
+  1.0f, 0.0f, 0.0f, 1.0f,
+  0.0f, 1.0f, 0.0f, 1.0f,
+  0.0f, 0.0f, 1.0f, 1.0f,
+};
 
 static VkImage swapchain_images[MAX_SWAPCHAIN_IMAGES];
 static VkImageView swapchain_image_views[MAX_SWAPCHAIN_IMAGES];
 static int camera_uniform_buffer_step;
 static VkBuffer camera_uniform_buffer;
 static VkDeviceMemory camera_uniform_buffer_memory;
+static VkDeviceMemory vertex_pos_buffer_memory, vertex_color_buffer_memory;
 static VkDescriptorPool descriptor_pool;
 
 struct lime_resources lime_resources;
@@ -144,6 +158,30 @@ allocate_buffers(void)
   err = vkCreateBuffer(lime_device.device, &create_info, NULL, &camera_uniform_buffer);
   ASSERT_VK_RESULT(err, "creating camera uniform buffer");
 
+  create_info.pNext = NULL;
+  create_info.flags = 0;
+  create_info.size = sizeof(vertex_positions);
+  create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+  create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  create_info.queueFamilyIndexCount = 0;
+  create_info.pQueueFamilyIndices = NULL;
+  assert(lime_resources.vertex_buffers[0] == VK_NULL_HANDLE);
+  err = vkCreateBuffer(lime_device.device, &create_info, NULL, &lime_resources.vertex_buffers[0]);
+  ASSERT_VK_RESULT(err, "creating vertex position buffer");
+  lime_resources.vertex_buffer_offsets[0] = 0;
+
+  create_info.pNext = NULL;
+  create_info.flags = 0;
+  create_info.size = sizeof(vertex_colors);
+  create_info.usage = VK_BUFFER_USAGE_VERTEX_BUFFER_BIT;
+  create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  create_info.queueFamilyIndexCount = 0;
+  create_info.pQueueFamilyIndices = NULL;
+  assert(lime_resources.vertex_buffers[1] == VK_NULL_HANDLE);
+  err = vkCreateBuffer(lime_device.device, &create_info, NULL, &lime_resources.vertex_buffers[1]);
+  ASSERT_VK_RESULT(err, "creating vertex color buffer");
+  lime_resources.vertex_buffer_offsets[1] = 0;
+
   vkGetBufferMemoryRequirements(lime_device.device, camera_uniform_buffer,
       &memory_requirements);
   allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
@@ -158,6 +196,53 @@ allocate_buffers(void)
   ASSERT_VK_RESULT(err, "allocating camera uniform buffer memory");
   err = vkBindBufferMemory(lime_device.device, camera_uniform_buffer,
       camera_uniform_buffer_memory, 0);
+
+  vkGetBufferMemoryRequirements(lime_device.device, lime_resources.vertex_buffers[0],
+      &memory_requirements);
+  allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocate_info.pNext = NULL;
+  allocate_info.allocationSize = memory_requirements.size;
+  allocate_info.memoryTypeIndex = lime_device_find_memory_type(
+      memory_requirements.memoryTypeBits,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  assert(vertex_pos_buffer_memory == VK_NULL_HANDLE);
+  err = vkAllocateMemory(lime_device.device, &allocate_info, NULL,
+      &vertex_pos_buffer_memory);
+  ASSERT_VK_RESULT(err, "allocating vertex position buffer memory");
+  err = vkBindBufferMemory(lime_device.device, lime_resources.vertex_buffers[0],
+      vertex_pos_buffer_memory, 0);
+
+  vkGetBufferMemoryRequirements(lime_device.device, lime_resources.vertex_buffers[1],
+      &memory_requirements);
+  allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocate_info.pNext = NULL;
+  allocate_info.allocationSize = memory_requirements.size;
+  allocate_info.memoryTypeIndex = lime_device_find_memory_type(
+      memory_requirements.memoryTypeBits,
+      VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+  assert(vertex_color_buffer_memory == VK_NULL_HANDLE);
+  err = vkAllocateMemory(lime_device.device, &allocate_info, NULL,
+      &vertex_color_buffer_memory);
+  ASSERT_VK_RESULT(err, "allocating vertex color buffer memory");
+  err = vkBindBufferMemory(lime_device.device, lime_resources.vertex_buffers[1],
+      vertex_color_buffer_memory, 0);
+}
+
+static void
+fill_vertex_buffers(void)
+{
+  float *mapped;
+  VkResult err;
+  err = vkMapMemory(lime_device.device, vertex_pos_buffer_memory,
+      0, sizeof(vertex_positions), 0, (void **)&mapped);
+  ASSERT_VK_RESULT(err, "mapping vertex position buffer");
+  memcpy(mapped, vertex_positions, sizeof(vertex_positions));
+  vkUnmapMemory(lime_device.device, vertex_pos_buffer_memory);
+  err = vkMapMemory(lime_device.device, vertex_color_buffer_memory,
+      0, sizeof(vertex_colors), 0, (void **)&mapped);
+  ASSERT_VK_RESULT(err, "mapping vertex colors buffer");
+  memcpy(mapped, vertex_colors, sizeof(vertex_colors));
+  vkUnmapMemory(lime_device.device, vertex_color_buffer_memory);
 }
 
 static void
@@ -231,6 +316,7 @@ lime_init_resources(void)
   create_swapchain(surface_capabilities);
   create_framebuffers();
   allocate_buffers();
+  fill_vertex_buffers();
   create_descriptor_pool();
   allocate_descriptor_sets();
   bind_descriptor_sets();
@@ -256,6 +342,10 @@ lime_destroy_resources(void)
   vkDestroyDescriptorPool(lime_device.device, descriptor_pool, NULL);
   vkDestroyBuffer(lime_device.device, camera_uniform_buffer, NULL);
   vkFreeMemory(lime_device.device, camera_uniform_buffer_memory, NULL);
+  for (i = 0; i < sizeof(lime_resources.vertex_buffers) / sizeof(lime_resources.vertex_buffers[0]); i++)
+    vkDestroyBuffer(lime_device.device, lime_resources.vertex_buffers[i], NULL);
+  vkFreeMemory(lime_device.device, vertex_pos_buffer_memory, NULL);
+  vkFreeMemory(lime_device.device, vertex_color_buffer_memory, NULL);
   for (i = 0; i < lime_resources.swapchain_image_count; i++) {
     vkDestroyFramebuffer(lime_device.device, lime_resources.swapchain_framebuffers[i], NULL);
     vkDestroyImageView(lime_device.device, swapchain_image_views[i], NULL);

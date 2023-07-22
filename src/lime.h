@@ -47,6 +47,8 @@ struct lime_resources {
   VkExtent2D swapchain_extent;
   VkFramebuffer swapchain_framebuffers[MAX_SWAPCHAIN_IMAGES];
   VkDescriptorSet camera_descriptor_sets[MAX_SWAPCHAIN_IMAGES];
+  VkBuffer vertex_buffers[2];
+  VkDeviceSize vertex_buffer_offsets[2];
 };
 
 extern struct lime_device lime_device;
