@@ -79,7 +79,7 @@ static void
 record_command_buffer(VkCommandBuffer command_buffer, int swap_index)
 {
   VkCommandBufferBeginInfo begin_info;
-  VkClearValue clear_value;
+  VkClearValue clear_values[2];
   VkRenderPassBeginInfo render_pass_info;
   VkViewport viewport;
   VkRect2D scissor;
@@ -93,10 +93,12 @@ record_command_buffer(VkCommandBuffer command_buffer, int swap_index)
   ASSERT_VK_RESULT(err, "begining command buffer");
 
   assert(lime_device.surface_format == VK_FORMAT_B8G8R8A8_UNORM);
-  clear_value.color.float32[0] = 128.0f / 255.0;
-  clear_value.color.float32[1] = 218.0f / 255.0;
-  clear_value.color.float32[2] = 251.0f / 255.0;
-  clear_value.color.float32[3] = 1.0f;
+  clear_values[0].color.float32[0] = 128.0f / 255.0;
+  clear_values[0].color.float32[1] = 218.0f / 255.0;
+  clear_values[0].color.float32[2] = 251.0f / 255.0;
+  clear_values[0].color.float32[3] = 1.0f;
+  clear_values[1].depthStencil.depth = 1.0f;
+  clear_values[1].depthStencil.stencil = 0;
 
   render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   render_pass_info.pNext = NULL;
@@ -105,8 +107,8 @@ record_command_buffer(VkCommandBuffer command_buffer, int swap_index)
   render_pass_info.renderArea.offset.x = 0;
   render_pass_info.renderArea.offset.y = 0;
   render_pass_info.renderArea.extent = lime_resources.swapchain_extent;
-  render_pass_info.clearValueCount = 1;
-  render_pass_info.pClearValues = &clear_value;
+  render_pass_info.clearValueCount = sizeof(clear_values) / sizeof(clear_values[0]);
+  render_pass_info.pClearValues = clear_values;
 
   viewport.x = viewport.y = 0.0f;
   viewport.width = lime_resources.swapchain_extent.width;

@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
+#include <string.h>
 #include <assert.h>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
@@ -22,8 +23,9 @@ struct lime_pipelines lime_pipelines;
 static void
 create_render_pass(void)
 {
-  VkAttachmentDescription attachments[1];
+  VkAttachmentDescription attachments[2];
   VkAttachmentReference color_attachments[1];
+  VkAttachmentReference depth_attachment;
   VkSubpassDependency subpass_dependencies[1];
   VkSubpassDescription subpass;
   VkRenderPassCreateInfo create_info;
@@ -39,15 +41,33 @@ create_render_pass(void)
   attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
   attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
 
+  attachments[1].flags = 0;
+  attachments[1].format = lime_device.depth_format;
+  attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+  attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+
   color_attachments[0].attachment = 0;
   color_attachments[0].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  depth_attachment.attachment = 1;
+  depth_attachment.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
   subpass_dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
   subpass_dependencies[0].dstSubpass = 0;
-  subpass_dependencies[0].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
-  subpass_dependencies[0].dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
+  subpass_dependencies[0].srcStageMask 
+    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+    | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
+  subpass_dependencies[0].dstStageMask
+    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+    | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
   subpass_dependencies[0].srcAccessMask = 0;
-  subpass_dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+  subpass_dependencies[0].dstAccessMask
+    = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+    | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
   subpass_dependencies[0].dependencyFlags = 0;
 
   subpass.flags = 0;
@@ -57,7 +77,7 @@ create_render_pass(void)
   subpass.colorAttachmentCount = sizeof(color_attachments) / sizeof(color_attachments[0]);
   subpass.pColorAttachments = color_attachments;
   subpass.pResolveAttachments = NULL;
-  subpass.pDepthStencilAttachment = NULL;
+  subpass.pDepthStencilAttachment = &depth_attachment;
   subpass.preserveAttachmentCount = 0;
   subpass.pPreserveAttachments = NULL;
 
@@ -164,6 +184,7 @@ create_pipeline(void)
   VkPipelineViewportStateCreateInfo viewport_state;
   VkPipelineRasterizationStateCreateInfo rasterization;
   VkPipelineMultisampleStateCreateInfo multisample;
+  VkPipelineDepthStencilStateCreateInfo depth_stencil;
   VkPipelineColorBlendAttachmentState color_blend_attachments[1];
   VkPipelineColorBlendStateCreateInfo color_blend;
   VkDynamicState dynamic_states[2];
@@ -247,6 +268,19 @@ create_pipeline(void)
   multisample.alphaToCoverageEnable = VK_FALSE;
   multisample.alphaToOneEnable = VK_FALSE;
 
+  depth_stencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  depth_stencil.pNext = NULL;
+  depth_stencil.flags = 0;
+  depth_stencil.depthTestEnable = VK_TRUE;
+  depth_stencil.depthWriteEnable = VK_TRUE;
+  depth_stencil.depthCompareOp = VK_COMPARE_OP_LESS;
+  depth_stencil.depthBoundsTestEnable = VK_FALSE;
+  depth_stencil.stencilTestEnable = VK_FALSE;
+  memset(&depth_stencil.front, 0, sizeof(depth_stencil.front));
+  memset(&depth_stencil.back, 0, sizeof(depth_stencil.front));
+  depth_stencil.minDepthBounds = 0.0f;
+  depth_stencil.maxDepthBounds = 1.0f;
+
   color_blend_attachments[0].blendEnable = VK_FALSE;
   color_blend_attachments[0].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
   color_blend_attachments[0].dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
@@ -291,7 +325,7 @@ create_pipeline(void)
   create_info.pViewportState = &viewport_state;
   create_info.pRasterizationState = &rasterization;
   create_info.pMultisampleState = &multisample;
-  create_info.pDepthStencilState = NULL;
+  create_info.pDepthStencilState = &depth_stencil;
   create_info.pColorBlendState = &color_blend;
   create_info.pDynamicState = &dynamic_state;
   create_info.layout = lime_pipelines.pipeline_layout;

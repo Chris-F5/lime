@@ -32,7 +32,7 @@ struct lime_device {
   uint32_t graphics_family_index;
   VkDevice device;
   VkQueue graphics_queue;
-  VkFormat surface_format;
+  VkFormat surface_format, depth_format;
   VkPresentModeKHR present_mode;
 };
 

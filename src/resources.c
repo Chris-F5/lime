@@ -10,6 +10,7 @@
 #include "lime.h"
 
 static void create_swapchain(VkSurfaceCapabilitiesKHR surface_capabilities);
+static void create_depth_image(void);
 static void create_framebuffers(void);
 static void allocate_buffers(void);
 static void create_descriptor_pool(void);
@@ -18,6 +19,9 @@ static void bind_descriptor_sets(void);
 
 static VkImage swapchain_images[MAX_SWAPCHAIN_IMAGES];
 static VkImageView swapchain_image_views[MAX_SWAPCHAIN_IMAGES];
+static VkImage depth_image;
+static VkDeviceMemory depth_image_memory;
+static VkImageView depth_image_view;
 static int camera_uniform_buffer_step;
 static VkBuffer camera_uniform_buffer;
 static VkDeviceMemory camera_uniform_buffer_memory;
@@ -97,22 +101,90 @@ create_swapchain(VkSurfaceCapabilitiesKHR surface_capabilities)
 }
 
 static void
+create_depth_image(void)
+{
+  VkImageCreateInfo create_info;
+  VkMemoryRequirements memory_requirements;
+  VkMemoryAllocateInfo allocate_info;
+  VkImageViewCreateInfo view_create_info;
+  VkResult err;
+
+  create_info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+  create_info.pNext = NULL;
+  create_info.flags = 0;
+  create_info.imageType = VK_IMAGE_TYPE_2D;
+  create_info.format = lime_device.depth_format;
+  create_info.extent.width = lime_resources.swapchain_extent.width;
+  create_info.extent.height = lime_resources.swapchain_extent.height;
+  create_info.extent.depth = 1;
+  create_info.mipLevels = 1;
+  create_info.arrayLayers = 1;
+  create_info.samples = VK_SAMPLE_COUNT_1_BIT;
+  create_info.tiling = VK_IMAGE_TILING_OPTIMAL;
+  create_info.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
+  create_info.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+  create_info.queueFamilyIndexCount = 0;
+  create_info.pQueueFamilyIndices = NULL;
+  create_info.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+
+  assert(depth_image == VK_NULL_HANDLE);
+  err = vkCreateImage(lime_device.device, &create_info, NULL, &depth_image);
+  ASSERT_VK_RESULT(err, "creating depth image");
+
+  vkGetImageMemoryRequirements(lime_device.device, depth_image, &memory_requirements);
+  allocate_info.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+  allocate_info.pNext = NULL;
+  allocate_info.allocationSize = memory_requirements.size;
+  allocate_info.memoryTypeIndex = lime_device_find_memory_type(
+      memory_requirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+
+  assert(depth_image_memory == VK_NULL_HANDLE);
+  err = vkAllocateMemory(lime_device.device, &allocate_info, NULL, &depth_image_memory);
+  ASSERT_VK_RESULT(err, "allocating depth image memory");
+  err = vkBindImageMemory(lime_device.device, depth_image, depth_image_memory, 0);
+  ASSERT_VK_RESULT(err, "binding depth image memory");
+
+  view_create_info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+  view_create_info.pNext = NULL;
+  view_create_info.flags = 0;
+  view_create_info.image = depth_image;
+  view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
+  view_create_info.format = lime_device.depth_format;
+  view_create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+  view_create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+  view_create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+  view_create_info.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+  view_create_info.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
+  view_create_info.subresourceRange.baseMipLevel = 0;
+  view_create_info.subresourceRange.levelCount = 1;
+  view_create_info.subresourceRange.baseArrayLayer = 0;
+  view_create_info.subresourceRange.layerCount = 1;
+  assert(depth_image_view == VK_NULL_HANDLE);
+  err = vkCreateImageView(lime_device.device, &view_create_info, NULL, &depth_image_view);
+  ASSERT_VK_RESULT(err, "creating depth image view");
+}
+
+static void
 create_framebuffers(void)
 {
+  VkImageView attachments[2];
   VkFramebufferCreateInfo create_info;
   int i;
   VkResult err;
+
+  attachments[1] = depth_image_view;
 
   create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
   create_info.pNext = NULL;
   create_info.flags = 0;
   create_info.renderPass = lime_pipelines.render_pass;
-  create_info.attachmentCount = 1;
+  create_info.attachmentCount = sizeof(attachments) / sizeof(attachments[0]);
+  create_info.pAttachments = attachments;
   create_info.width = lime_resources.swapchain_extent.width;
   create_info.height = lime_resources.swapchain_extent.height;
   create_info.layers = 1;
   for (i = 0; i < lime_resources.swapchain_image_count; i++) {
-    create_info.pAttachments = &swapchain_image_views[i];
+    attachments[0] = swapchain_image_views[i];
     assert(lime_resources.swapchain_framebuffers[i] == VK_NULL_HANDLE);
     err = vkCreateFramebuffer(lime_device.device, &create_info, NULL,
         &lime_resources.swapchain_framebuffers[i]);
@@ -231,6 +303,7 @@ lime_init_resources(void)
   VkSurfaceCapabilitiesKHR surface_capabilities;
   surface_capabilities = lime_get_current_surface_capabilities();
   create_swapchain(surface_capabilities);
+  create_depth_image();
   create_framebuffers();
   allocate_buffers();
   create_descriptor_pool();
@@ -258,6 +331,9 @@ lime_destroy_resources(void)
   vkDestroyDescriptorPool(lime_device.device, descriptor_pool, NULL);
   vkDestroyBuffer(lime_device.device, camera_uniform_buffer, NULL);
   vkFreeMemory(lime_device.device, camera_uniform_buffer_memory, NULL);
+  vkDestroyImageView(lime_device.device, depth_image_view, NULL);
+  vkDestroyImage(lime_device.device, depth_image, NULL);
+  vkFreeMemory(lime_device.device, depth_image_memory, NULL);
   for (i = 0; i < lime_resources.swapchain_image_count; i++) {
     vkDestroyFramebuffer(lime_device.device, lime_resources.swapchain_framebuffers[i], NULL);
     vkDestroyImageView(lime_device.device, swapchain_image_views[i], NULL);
