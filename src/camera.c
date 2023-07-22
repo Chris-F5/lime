@@ -22,19 +22,19 @@ process_camera_input(struct camera *camera, GLFWwindow *window)
   if (camera->pitch < -M_PI / 2.0f)
     camera->pitch = -M_PI / 2.0f;
   if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS) {
-    camera->x += sinf(camera->yaw) * move_speed;
+    camera->x -= sinf(camera->yaw) * move_speed;
     camera->z += cosf(camera->yaw) * move_speed;
   }
   if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS) {
-    camera->x -= sinf(camera->yaw) * move_speed;
+    camera->x += sinf(camera->yaw) * move_speed;
     camera->z -= cosf(camera->yaw) * move_speed;
   }
   if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS) {
-    camera->x += sinf(camera->yaw + M_PI / 2.0f) * move_speed;
+    camera->x -= sinf(camera->yaw + M_PI / 2.0f) * move_speed;
     camera->z += cosf(camera->yaw + M_PI / 2.0f) * move_speed;
   }
   if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS) {
-    camera->x -= sinf(camera->yaw + M_PI / 2.0f) * move_speed;
+    camera->x += sinf(camera->yaw + M_PI / 2.0f) * move_speed;
     camera->z -= cosf(camera->yaw + M_PI / 2.0f) * move_speed;
   }
   if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
