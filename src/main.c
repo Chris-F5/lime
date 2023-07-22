@@ -1,7 +1,9 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
+#include "matrix.h"
 #include "lime.h"
 
 static void glfw_error_callback(int _, const char* errorString);
@@ -33,6 +35,10 @@ main(int argc, char **argv)
   lime_init_resources();
   lime_init_renderer();
   printf("hello world\n");
+
+  mat4_identity(camera.view);
+  mat4_projection(camera.proj, 1, 1.5f, 0.1, 100);
+  camera.color = 0;
 
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();

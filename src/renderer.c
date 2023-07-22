@@ -5,6 +5,7 @@
 #include <assert.h>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
+#include "matrix.h"
 #include "lime.h"
 #include "utils.h"
 

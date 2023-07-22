@@ -4,6 +4,7 @@
  * #include <stdlib.h>
  * #include <vulkan/vulkan.h>
  * #include <GLFW/glfw3.h>
+ * #include "matrix.h"
  */
 
 #define PRINT_VK_ERROR(err, string) { \
@@ -18,6 +19,8 @@
 #define MAX_SWAPCHAIN_IMAGES 8
 
 struct camera_uniform_data {
+  mat4 view;
+  mat4 proj;
   int color;
 };
 

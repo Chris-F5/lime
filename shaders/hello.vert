@@ -1,13 +1,19 @@
 #version 450
 
-vec2 hello_triangle[3] = vec2[] (
-  vec2(0.0, -0.5),
-  vec2(0.5, 0.5),
-  vec2(-0.5, 0.5)
+layout(set = 0, binding = 0) uniform camera_uniform_buffer {
+  mat4 view;
+  mat4 proj;
+  int number;
+};
+
+vec3 hello_triangle[3] = vec3[] (
+  vec3(0.0, -0.5, 5.0),
+  vec3(0.5, 0.5, 10.0),
+  vec3(-0.5, 0.5, 5.0)
 );
 
 void
 main()
 {
-  gl_Position = vec4(hello_triangle[gl_VertexIndex], 0.0, 1.0);
+  gl_Position = proj * view * vec4(hello_triangle[gl_VertexIndex], 1.0);
 }
