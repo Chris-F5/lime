@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <string.h>
 #include <assert.h>
 #include <vulkan/vulkan.h>
@@ -121,11 +122,12 @@ record_command_buffer(VkCommandBuffer command_buffer, int swap_index)
       lime_pipelines.pipeline_layout, 0, 1,
       &lime_resources.camera_descriptor_sets[swap_index], 0, NULL);
   vkCmdBindVertexBuffers(command_buffer, 0,
-      sizeof(lime_resources.vertex_buffers) / sizeof(lime_resources.vertex_buffers[0]),
-      lime_resources.vertex_buffers, lime_resources.vertex_buffer_offsets);
+      sizeof(lime_vertex_buffers.vertex_buffers) / sizeof(lime_vertex_buffers.vertex_buffers[0]),
+      lime_vertex_buffers.vertex_buffers, lime_vertex_buffers.vertex_buffer_offsets);
+  vkCmdBindIndexBuffer(command_buffer, lime_vertex_buffers.index_buffer, 0, VK_INDEX_TYPE_UINT32);
   vkCmdSetViewport(command_buffer, 0, 1, &viewport);
   vkCmdSetScissor(command_buffer, 0, 1, &scissor);
-  vkCmdDraw(command_buffer, 3, 1, 0, 0);
+  vkCmdDrawIndexed(command_buffer, lime_vertex_buffers.face_count * 3, 1, 0, 0, 0);
   vkCmdEndRenderPass(command_buffer);
   err = vkEndCommandBuffer(command_buffer);
   ASSERT_VK_RESULT(err, "recording command buffer");

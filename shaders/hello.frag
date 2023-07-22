@@ -1,6 +1,7 @@
 #version 450
 
 layout(set = 0, binding = 0) uniform camera_uniform_buffer {
+  mat4 model;
   mat4 view;
   mat4 proj;
 };

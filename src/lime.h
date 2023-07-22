@@ -2,6 +2,7 @@
  * The following must be included before this file:
  * #include <stdio.h>
  * #include <stdlib.h>
+ * #include <stdint.h>
  * #include <vulkan/vulkan.h>
  * #include <GLFW/glfw3.h>
  * #include "matrix.h"
@@ -19,6 +20,7 @@
 #define MAX_SWAPCHAIN_IMAGES 8
 
 struct camera_uniform_data {
+  mat4 model;
   mat4 view;
   mat4 proj;
   int color;
@@ -47,13 +49,19 @@ struct lime_resources {
   VkExtent2D swapchain_extent;
   VkFramebuffer swapchain_framebuffers[MAX_SWAPCHAIN_IMAGES];
   VkDescriptorSet camera_descriptor_sets[MAX_SWAPCHAIN_IMAGES];
+};
+
+struct lime_vertex_buffers {
+  int vertex_count, face_count;
   VkBuffer vertex_buffers[2];
+  VkBuffer index_buffer;
   VkDeviceSize vertex_buffer_offsets[2];
 };
 
 extern struct lime_device lime_device;
 extern struct lime_pipelines lime_pipelines;
 extern struct lime_resources lime_resources;
+extern struct lime_vertex_buffers lime_vertex_buffers;
 
 /* device.c */
 void lime_init_device(GLFWwindow *window);
@@ -70,6 +78,11 @@ void lime_destroy_pipelines(void);
 void lime_init_resources(void);
 void set_camera_uniform_data(int swap_index, struct camera_uniform_data data);
 void lime_destroy_resources(void);
+
+/* vertex_buffers.c */
+void lime_init_vertex_buffers(int vertex_count, int face_count, const float *vertex_positions,
+    const float *vertex_colors, const uint32_t *vertex_indices);
+void lime_destroy_vertex_buffers(void);
 
 /* renderer.c */
 void lime_init_renderer(void);

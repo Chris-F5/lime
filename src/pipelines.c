@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <stdint.h>
 #include <assert.h>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
