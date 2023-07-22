@@ -7,9 +7,9 @@ layout(set = 0, binding = 0) uniform camera_uniform_buffer {
 };
 
 vec3 hello_triangle[3] = vec3[] (
-  vec3(0.0, -0.5, 5.0),
-  vec3(0.5, 0.5, 10.0),
-  vec3(-0.5, 0.5, 5.0)
+  vec3(-0.5, 0.5, 5.0),
+  vec3(0.5, 0.5, 5.0),
+  vec3(0.0, -0.5, 5.0)
 );
 
 void

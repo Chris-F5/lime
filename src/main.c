@@ -5,6 +5,7 @@
 #include <GLFW/glfw3.h>
 #include "matrix.h"
 #include "lime.h"
+#include "camera.h"
 
 static void glfw_error_callback(int _, const char* errorString);
 
@@ -22,7 +23,8 @@ int
 main(int argc, char **argv)
 {
   GLFWwindow *window;
-  struct camera_uniform_data camera;
+  struct camera camera;
+  struct camera_uniform_data camera_uniform_data;
 
   glfwSetErrorCallback(glfw_error_callback);
   glfwInit();
@@ -36,14 +38,17 @@ main(int argc, char **argv)
   lime_init_renderer();
   printf("hello world\n");
 
-  mat4_identity(camera.view);
-  mat4_projection(camera.proj, 1, 1.5f, 0.1, 100);
-  camera.color = 0;
+  camera.x = camera.y = camera.z = 0.0f;
+  camera.yaw = camera.pitch = 0.0f;
+  mat4_projection(camera_uniform_data.proj, 1, 1.5f, 0.1, 100);
+  camera_uniform_data.color = 0;
 
   while (!glfwWindowShouldClose(window)) {
     glfwPollEvents();
-    lime_draw_frame(camera);
-    camera.color = (camera.color + 1) % 256;
+    process_camera_input(&camera, window);
+    mat4_view(camera_uniform_data.view, camera.pitch, camera.yaw, camera.x, camera.y, camera.z);
+    lime_draw_frame(camera_uniform_data);
+    camera_uniform_data.color = (camera_uniform_data.color + 1) % 256;
   }
   vkDeviceWaitIdle(lime_device.device);
   lime_destroy_renderer();

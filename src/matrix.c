@@ -37,7 +37,7 @@ mat4_projection(mat4 m, float aspect_ratio, float vertical_fov, float near, floa
   m[ 3] = 0.0f;
 
   m[ 4] = 0.0f;
-  m[ 5] = cot;
+  m[ 5] = -cot;
   m[ 6] = 0.0f;
   m[ 7] = 0.0f;
 
@@ -50,4 +50,34 @@ mat4_projection(mat4 m, float aspect_ratio, float vertical_fov, float near, floa
   m[13] = 0.0f;
   m[14] = -(near * far) / (far - near);
   m[15] = 0.0f;
+}
+
+void
+mat4_view(mat4 m, float pitch, float yaw, float x, float y, float z)
+{
+  float cosy, siny, cosp, sinp;
+  cosy = cosf(yaw);
+  siny = sinf(yaw);
+  cosp = cosf(pitch);
+  sinp = sinf(pitch);
+
+  m[ 0] = cosy;
+  m[ 1] = -sinp * siny;
+  m[ 2] = cosp * siny;
+  m[ 3] = 0.0f;
+
+  m[ 4] = 0.0f;
+  m[ 5] = cosp;
+  m[ 6] = sinp;
+  m[ 7] = 0.0f;
+
+  m[ 8] = -siny;
+  m[ 9] = -sinp * cosy;
+  m[10] = cosp * cosy;
+  m[11] = 0.0f;
+
+  m[12] = -x * m[0] - y * m[4] - z * m[8];
+  m[13] = -x * m[1] - y * m[5] - z * m[9];
+  m[14] = -x * m[2] - y * m[6] - z * m[10];
+  m[15] = 1.0f;
 }
