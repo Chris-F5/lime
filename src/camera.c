@@ -4,7 +4,7 @@
 #include <math.h>
 
 const float rot_speed = 0.05f;
-const float move_speed = 0.2f;
+const float move_speed = 0.05f;
 
 void
 process_camera_input(struct camera *camera, GLFWwindow *window)

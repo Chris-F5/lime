@@ -58,9 +58,10 @@ allocate_vertex_buffers(int vertex_count, int index_count)
   assert(vertex_buffer_memory == VK_NULL_HANDLE);
   err = vkAllocateMemory(lime_device.device, &allocate_info, NULL,
       &vertex_buffer_memory);
-  ASSERT_VK_RESULT(err, "allocating vertex position buffer memory");
+  ASSERT_VK_RESULT(err, "allocating vertex buffer memory");
   err = vkBindBufferMemory(lime_device.device, lime_vertex_buffers.vertex_buffer,
       vertex_buffer_memory, 0);
+  ASSERT_VK_RESULT(err, "binding vertex buffer memory");
 
   vkGetBufferMemoryRequirements(lime_device.device, lime_vertex_buffers.index_buffer,
       &memory_requirements);
@@ -75,6 +76,7 @@ allocate_vertex_buffers(int vertex_count, int index_count)
   ASSERT_VK_RESULT(err, "allocating vertex index buffer memory");
   err = vkBindBufferMemory(lime_device.device, lime_vertex_buffers.index_buffer,
       index_buffer_memory, 0);
+  ASSERT_VK_RESULT(err, "binding vertex index buffer memory");
 }
 
 void

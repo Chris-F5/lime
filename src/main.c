@@ -45,6 +45,7 @@ main(int argc, char **argv)
   lime_init_pipelines();
   lime_init_resources();
   lime_init_vertex_buffers(&ivo);
+  lime_init_textures("viking_room.png");
   lime_init_renderer();
 
   destroy_wavefront_obj(&wavefront);
@@ -65,6 +66,7 @@ main(int argc, char **argv)
   }
   vkDeviceWaitIdle(lime_device.device);
   lime_destroy_renderer();
+  lime_destroy_textures();
   lime_destroy_vertex_buffers();
   lime_destroy_resources();
   lime_destroy_pipelines();

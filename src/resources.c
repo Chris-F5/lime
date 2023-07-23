@@ -45,8 +45,8 @@ create_swapchain(VkSurfaceCapabilitiesKHR surface_capabilities)
     create_info.minImageCount = surface_capabilities.minImageCount;
   else
     create_info.minImageCount = surface_capabilities.minImageCount + 1;
-  create_info.imageFormat = lime_device.surface_format;
-  create_info.imageColorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR;
+  create_info.imageFormat = lime_device.surface_format.format;
+  create_info.imageColorSpace = lime_device.surface_format.colorSpace;
   if (surface_capabilities.currentExtent.width == 0xffffffff) {
     create_info.imageExtent.width = 500;
     create_info.imageExtent.height = 500;
@@ -84,7 +84,7 @@ create_swapchain(VkSurfaceCapabilitiesKHR surface_capabilities)
   view_create_info.pNext = NULL;
   view_create_info.flags = 0;
   view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-  view_create_info.format = lime_device.surface_format;
+  view_create_info.format = lime_device.surface_format.format;
   view_create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
   view_create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
   view_create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;

@@ -4,6 +4,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <assert.h>
+#include <math.h>
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 #include "matrix.h"
@@ -93,10 +94,10 @@ record_command_buffer(VkCommandBuffer command_buffer, int swap_index)
   err = vkBeginCommandBuffer(command_buffer, &begin_info);
   ASSERT_VK_RESULT(err, "begining command buffer");
 
-  assert(lime_device.surface_format == VK_FORMAT_B8G8R8A8_UNORM);
-  clear_values[0].color.float32[0] = 128.0f / 255.0;
-  clear_values[0].color.float32[1] = 218.0f / 255.0;
-  clear_values[0].color.float32[2] = 251.0f / 255.0;
+  assert(lime_device.surface_format.format == VK_FORMAT_B8G8R8A8_SRGB);
+  clear_values[0].color.float32[0] = powf(128.0f / 255.0, 2.4f);
+  clear_values[0].color.float32[1] = powf(218.0f / 255.0, 2.4f);
+  clear_values[0].color.float32[2] = powf(251.0f / 255.0, 2.4f);
   clear_values[0].color.float32[3] = 1.0f;
   clear_values[1].depthStencil.depth = 1.0f;
   clear_values[1].depthStencil.stencil = 0;
@@ -124,6 +125,9 @@ record_command_buffer(VkCommandBuffer command_buffer, int swap_index)
   vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
       lime_pipelines.pipeline_layout, 0, 1,
       &lime_resources.camera_descriptor_sets[swap_index], 0, NULL);
+  vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+      lime_pipelines.pipeline_layout, 1, 1,
+      &lime_textures.texture_descriptor_set, 0, NULL);
   vkCmdBindVertexBuffers(command_buffer, 0, 1, &lime_vertex_buffers.vertex_buffer,
       &(VkDeviceSize){0});
   vkCmdBindIndexBuffer(command_buffer, lime_vertex_buffers.index_buffer, 0, VK_INDEX_TYPE_UINT32);

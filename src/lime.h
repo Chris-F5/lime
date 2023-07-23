@@ -33,13 +33,14 @@ struct lime_device {
   uint32_t graphics_family_index;
   VkDevice device;
   VkQueue graphics_queue;
-  VkFormat surface_format, depth_format;
+  VkSurfaceFormatKHR surface_format;
+  VkFormat depth_format;
   VkPresentModeKHR present_mode;
 };
 
 struct lime_pipelines {
   VkRenderPass render_pass;
-  VkDescriptorSetLayout camera_descriptor_set_layout;
+  VkDescriptorSetLayout camera_descriptor_set_layout, texture_descriptor_set_layout;
   VkPipelineLayout pipeline_layout;
   VkPipeline pipeline;
 };
@@ -58,10 +59,15 @@ struct lime_vertex_buffers {
   VkBuffer index_buffer;
 };
 
+struct lime_textures {
+  VkDescriptorSet texture_descriptor_set;
+};
+
 extern struct lime_device lime_device;
 extern struct lime_pipelines lime_pipelines;
 extern struct lime_resources lime_resources;
 extern struct lime_vertex_buffers lime_vertex_buffers;
+extern struct lime_textures lime_textures;
 
 /* device.c */
 void lime_init_device(GLFWwindow *window);
@@ -82,6 +88,10 @@ void lime_destroy_resources(void);
 /* vertex_buffers.c */
 void lime_init_vertex_buffers(const struct indexed_vertex_obj *ivo);
 void lime_destroy_vertex_buffers(void);
+
+/* textures.c */
+void lime_init_textures(const char *fname);
+void lime_destroy_textures(void);
 
 /* renderer.c */
 void lime_init_renderer(void);

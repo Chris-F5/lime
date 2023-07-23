@@ -33,7 +33,7 @@ create_render_pass(void)
   VkResult err;
 
   attachments[0].flags = 0;
-  attachments[0].format = lime_device.surface_format;
+  attachments[0].format = lime_device.surface_format.format;
   attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
   attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
   attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
@@ -109,29 +109,45 @@ create_descriptor_set_layouts(void)
   bindings[0].stageFlags
     = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
   bindings[0].pImmutableSamplers = NULL;
-
   create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
   create_info.pNext = NULL;
   create_info.flags = 0;
   create_info.bindingCount = 1;
   create_info.pBindings = bindings;
-
   assert(lime_pipelines.camera_descriptor_set_layout == VK_NULL_HANDLE);
   err = vkCreateDescriptorSetLayout(lime_device.device, &create_info, NULL,
       &lime_pipelines.camera_descriptor_set_layout);
   ASSERT_VK_RESULT(err, "creating camera descriptor set layout");
+
+  bindings[0].binding = 0;
+  bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+  bindings[0].descriptorCount = 1;
+  bindings[0].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+  bindings[0].pImmutableSamplers = NULL;
+  create_info.pNext = NULL;
+  create_info.flags = 0;
+  create_info.bindingCount = 1;
+  create_info.pBindings = bindings;
+  assert(lime_pipelines.texture_descriptor_set_layout == VK_NULL_HANDLE);
+  err = vkCreateDescriptorSetLayout(lime_device.device, &create_info, NULL,
+      &lime_pipelines.texture_descriptor_set_layout);
+  ASSERT_VK_RESULT(err, "creating texture descriptor set layout");
 }
 
 static void
 create_pipeline_layout(void)
 {
+  const VkDescriptorSetLayout set_layouts[] = {
+    lime_pipelines.camera_descriptor_set_layout,
+    lime_pipelines.texture_descriptor_set_layout,
+  };
   VkPipelineLayoutCreateInfo create_info;
   VkResult err;
   create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   create_info.pNext = NULL;
   create_info.flags = 0;
-  create_info.setLayoutCount = 1;
-  create_info.pSetLayouts = &lime_pipelines.camera_descriptor_set_layout;
+  create_info.setLayoutCount = sizeof(set_layouts) / sizeof(set_layouts[0]);
+  create_info.pSetLayouts = set_layouts;
   create_info.pushConstantRangeCount = 0;
   create_info.pPushConstantRanges = NULL;
   assert(lime_pipelines.pipeline_layout == VK_NULL_HANDLE);
@@ -362,5 +378,7 @@ lime_destroy_pipelines(void)
   vkDestroyPipelineLayout(lime_device.device, lime_pipelines.pipeline_layout, NULL);
   vkDestroyDescriptorSetLayout(lime_device.device,
       lime_pipelines.camera_descriptor_set_layout, NULL);
+  vkDestroyDescriptorSetLayout(lime_device.device,
+      lime_pipelines.texture_descriptor_set_layout, NULL);
   vkDestroyRenderPass(lime_device.device, lime_pipelines.render_pass, NULL);
 }

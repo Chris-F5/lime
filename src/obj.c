@@ -159,9 +159,8 @@ wavefront_to_indexed_vertex_obj(struct indexed_vertex_obj *ivo,
         &wavefront->positions[wavefront->position_faces[vert] * 3],
         3 * sizeof(float));
     if (wavefront->uv_faces) {
-      memcpy(&ivo->vertices[next_index].uv,
-          &wavefront->uvs[wavefront->uv_faces[vert] * 2],
-          2 * sizeof(float));
+      ivo->vertices[next_index].uv[0] = wavefront->uvs[wavefront->uv_faces[vert] * 2];
+      ivo->vertices[next_index].uv[1] = 1.0f - wavefront->uvs[wavefront->uv_faces[vert] * 2 + 1];
     } else {
       ivo->vertices[next_index].uv[0] = 0.0f;
       ivo->vertices[next_index].uv[1] = 0.0f;
