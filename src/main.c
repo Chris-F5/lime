@@ -5,6 +5,7 @@
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 #include "matrix.h"
+#include "obj_types.h"
 #include "lime.h"
 #include "utils.h"
 #include "camera.h"
@@ -26,11 +27,10 @@ int
 main(int argc, char **argv)
 {
   GLFWwindow *window;
+  struct wavefront_obj wavefront;
+  struct indexed_vertex_obj ivo;
   struct camera camera;
   struct camera_uniform_data camera_uniform_data;
-  int vertex_count, face_count, i;
-  float *vertex_positions, *vertex_colors;
-  uint32_t *vertex_indices;
 
   glfwSetErrorCallback(glfw_error_callback);
   glfwInit();
@@ -38,24 +38,17 @@ main(int argc, char **argv)
   glfwWindowHint(GLFW_RESIZABLE, GLFW_FALSE);
   window = glfwCreateWindow(WIDTH, HEIGHT, "lime demo", NULL, NULL);
 
-  parse_obj("viking_room.obj", &vertex_count, &face_count, &vertex_positions, &vertex_indices);
-  vertex_colors = xmalloc(vertex_count * 4 * sizeof(float));
-  for (i = 0; i < vertex_count; i++) {
-    vertex_colors[i * 4 + 0] = (float)rand() / (float)RAND_MAX;
-    vertex_colors[i * 4 + 1] = (float)rand() / (float)RAND_MAX;
-    vertex_colors[i * 4 + 2] = (float)rand() / (float)RAND_MAX;
-    vertex_colors[i * 4 + 3] = 1.0f;
-  }
+  load_wavefront_obj(&wavefront, "viking_room.obj");
+  wavefront_to_indexed_vertex_obj(&ivo, &wavefront);
 
   lime_init_device(window);
   lime_init_pipelines();
   lime_init_resources();
-  lime_init_vertex_buffers(vertex_count, face_count, vertex_positions, vertex_colors, vertex_indices);
+  lime_init_vertex_buffers(&ivo);
   lime_init_renderer();
 
-  free(vertex_positions);
-  free(vertex_colors);
-  free(vertex_indices);
+  destroy_wavefront_obj(&wavefront);
+  destroy_indexed_vertex_obj(&ivo);
 
   camera.x = camera.y = camera.z = 0.0f;
   camera.yaw = camera.pitch = 0.0f;

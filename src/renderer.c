@@ -7,6 +7,7 @@
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 #include "matrix.h"
+#include "obj_types.h"
 #include "lime.h"
 #include "utils.h"
 
@@ -123,13 +124,12 @@ record_command_buffer(VkCommandBuffer command_buffer, int swap_index)
   vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
       lime_pipelines.pipeline_layout, 0, 1,
       &lime_resources.camera_descriptor_sets[swap_index], 0, NULL);
-  vkCmdBindVertexBuffers(command_buffer, 0,
-      sizeof(lime_vertex_buffers.vertex_buffers) / sizeof(lime_vertex_buffers.vertex_buffers[0]),
-      lime_vertex_buffers.vertex_buffers, lime_vertex_buffers.vertex_buffer_offsets);
+  vkCmdBindVertexBuffers(command_buffer, 0, 1, &lime_vertex_buffers.vertex_buffer,
+      &(VkDeviceSize){0});
   vkCmdBindIndexBuffer(command_buffer, lime_vertex_buffers.index_buffer, 0, VK_INDEX_TYPE_UINT32);
   vkCmdSetViewport(command_buffer, 0, 1, &viewport);
   vkCmdSetScissor(command_buffer, 0, 1, &scissor);
-  vkCmdDrawIndexed(command_buffer, lime_vertex_buffers.face_count * 3, 1, 0, 0, 0);
+  vkCmdDrawIndexed(command_buffer, lime_vertex_buffers.index_count, 1, 0, 0, 0);
   vkCmdEndRenderPass(command_buffer);
   err = vkEndCommandBuffer(command_buffer);
   ASSERT_VK_RESULT(err, "recording command buffer");

@@ -6,6 +6,7 @@
  * #include <vulkan/vulkan.h>
  * #include <GLFW/glfw3.h>
  * #include "matrix.h"
+ * #include "obj_types.h"
  */
 
 #define PRINT_VK_ERROR(err, string) { \
@@ -52,10 +53,9 @@ struct lime_resources {
 };
 
 struct lime_vertex_buffers {
-  int vertex_count, face_count;
-  VkBuffer vertex_buffers[2];
+  int vertex_count, index_count;
+  VkBuffer vertex_buffer;
   VkBuffer index_buffer;
-  VkDeviceSize vertex_buffer_offsets[2];
 };
 
 extern struct lime_device lime_device;
@@ -80,8 +80,7 @@ void set_camera_uniform_data(int swap_index, struct camera_uniform_data data);
 void lime_destroy_resources(void);
 
 /* vertex_buffers.c */
-void lime_init_vertex_buffers(int vertex_count, int face_count, const float *vertex_positions,
-    const float *vertex_colors, const uint32_t *vertex_indices);
+void lime_init_vertex_buffers(const struct indexed_vertex_obj *ivo);
 void lime_destroy_vertex_buffers(void);
 
 /* renderer.c */

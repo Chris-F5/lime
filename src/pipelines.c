@@ -6,6 +6,7 @@
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 #include "matrix.h"
+#include "obj_types.h"
 #include "lime.h"
 #include "utils.h"
 
@@ -177,8 +178,8 @@ static void
 create_pipeline(void)
 {
   VkPipelineShaderStageCreateInfo shader_stages[2];
-  VkVertexInputBindingDescription vertex_input_bindings[2];
-  VkVertexInputAttributeDescription vertex_input_attributes[2];
+  VkVertexInputBindingDescription vertex_input_bindings[1];
+  VkVertexInputAttributeDescription vertex_input_attributes[3];
   VkPipelineVertexInputStateCreateInfo vertex_input;
   VkPipelineInputAssemblyStateCreateInfo input_assembly;
   VkPipelineViewportStateCreateInfo viewport_state;
@@ -208,19 +209,20 @@ create_pipeline(void)
   shader_stages[1].pSpecializationInfo = NULL;
 
   vertex_input_bindings[0].binding = 0;
-  vertex_input_bindings[0].stride = 4 * sizeof(float);
+  vertex_input_bindings[0].stride = sizeof(struct vertex);
   vertex_input_bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-  vertex_input_bindings[1].binding = 1;
-  vertex_input_bindings[1].stride = 4 * sizeof(float);
-  vertex_input_bindings[1].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
   vertex_input_attributes[0].location = 0;
   vertex_input_attributes[0].binding = 0;
-  vertex_input_attributes[0].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-  vertex_input_attributes[0].offset = 0;
+  vertex_input_attributes[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+  vertex_input_attributes[0].offset = offsetof(struct vertex, pos);
   vertex_input_attributes[1].location = 1;
-  vertex_input_attributes[1].binding = 1;
-  vertex_input_attributes[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
-  vertex_input_attributes[1].offset = 0;
+  vertex_input_attributes[1].binding = 0;
+  vertex_input_attributes[1].format = VK_FORMAT_R32G32_SFLOAT;
+  vertex_input_attributes[1].offset = offsetof(struct vertex, uv);
+  vertex_input_attributes[2].location = 2;
+  vertex_input_attributes[2].binding = 0;
+  vertex_input_attributes[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+  vertex_input_attributes[2].offset = offsetof(struct vertex, normal);
 
   vertex_input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
   vertex_input.pNext = NULL;

@@ -4,6 +4,7 @@
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 #include "matrix.h"
+#include "obj_types.h"
 #include "lime.h"
 
 char *
