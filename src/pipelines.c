@@ -10,14 +10,34 @@
 #include "lime.h"
 #include "utils.h"
 
+struct pipeline_create_info {
+  VkPipelineShaderStageCreateInfo shader_stages[2];
+  VkVertexInputBindingDescription vertex_input_bindings[1];
+  VkVertexInputAttributeDescription vertex_input_attributes[3];
+  VkPipelineVertexInputStateCreateInfo vertex_input;
+  VkPipelineInputAssemblyStateCreateInfo input_assembly;
+  VkPipelineViewportStateCreateInfo viewport_state;
+  VkPipelineRasterizationStateCreateInfo rasterization;
+  VkPipelineMultisampleStateCreateInfo multisample;
+  VkPipelineDepthStencilStateCreateInfo depth_stencil;
+  VkPipelineColorBlendAttachmentState color_blend_attachments[1];
+  VkPipelineColorBlendStateCreateInfo color_blend;
+  VkDynamicState dynamic_states[2];
+  VkPipelineDynamicStateCreateInfo dynamic_state;
+  VkGraphicsPipelineCreateInfo create_info;
+};
+
 static void create_render_pass(void);
 static void create_descriptor_set_layouts(void);
-static void create_pipeline_layout(void);
+static void create_pipeline_layouts(void);
 static VkShaderModule create_shader_module(const char *file_name);
-static void create_pipeline(void);
+static void init_default_pipeline_states(struct pipeline_create_info *info);
+static void create_pipelines(void);
 
 static VkShaderModule hello_vert_module;
 static VkShaderModule hello_frag_module;
+static VkShaderModule voxel_block_vert_module;
+static VkShaderModule voxel_block_frag_module;
 
 struct lime_pipelines lime_pipelines;
 
@@ -99,15 +119,14 @@ create_render_pass(void)
 static void
 create_descriptor_set_layouts(void)
 {
-  VkDescriptorSetLayoutBinding bindings[1];
+  VkDescriptorSetLayoutBinding bindings[2];
   VkDescriptorSetLayoutCreateInfo create_info;
   VkResult err;
 
   bindings[0].binding = 0;
   bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
   bindings[0].descriptorCount = 1;
-  bindings[0].stageFlags
-    = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+  bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
   bindings[0].pImmutableSamplers = NULL;
   create_info.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
   create_info.pNext = NULL;
@@ -132,21 +151,40 @@ create_descriptor_set_layouts(void)
   err = vkCreateDescriptorSetLayout(lime_device.device, &create_info, NULL,
       &lime_pipelines.texture_descriptor_set_layout);
   ASSERT_VK_RESULT(err, "creating texture descriptor set layout");
+
+  bindings[0].binding = 0;
+  bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  bindings[0].descriptorCount = 1;
+  bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
+  bindings[0].pImmutableSamplers = NULL;
+  bindings[1].binding = 1;
+  bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_IMAGE;
+  bindings[1].descriptorCount = 1;
+  bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+  bindings[1].pImmutableSamplers = NULL;
+  create_info.pNext = NULL;
+  create_info.flags = 0;
+  create_info.bindingCount = 2;
+  create_info.pBindings = bindings;
+  assert(lime_pipelines.voxel_block_descriptor_set_layout == VK_NULL_HANDLE);
+  err = vkCreateDescriptorSetLayout(lime_device.device, &create_info, NULL,
+      &lime_pipelines.voxel_block_descriptor_set_layout);
+  ASSERT_VK_RESULT(err, "creating voxel block descriptor set layout");
 }
 
 static void
-create_pipeline_layout(void)
+create_pipeline_layouts(void)
 {
-  const VkDescriptorSetLayout set_layouts[] = {
-    lime_pipelines.camera_descriptor_set_layout,
-    lime_pipelines.texture_descriptor_set_layout,
-  };
+  VkDescriptorSetLayout set_layouts[2];
   VkPipelineLayoutCreateInfo create_info;
   VkResult err;
+
+  set_layouts[0] = lime_pipelines.camera_descriptor_set_layout;
+  set_layouts[1] = lime_pipelines.texture_descriptor_set_layout;
   create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
   create_info.pNext = NULL;
   create_info.flags = 0;
-  create_info.setLayoutCount = sizeof(set_layouts) / sizeof(set_layouts[0]);
+  create_info.setLayoutCount = 2;
   create_info.pSetLayouts = set_layouts;
   create_info.pushConstantRangeCount = 0;
   create_info.pPushConstantRanges = NULL;
@@ -154,6 +192,20 @@ create_pipeline_layout(void)
   err = vkCreatePipelineLayout(lime_device.device, &create_info, NULL,
       &lime_pipelines.pipeline_layout);
   ASSERT_VK_RESULT(err, "creating pipeline layout");
+
+  set_layouts[0] = lime_pipelines.camera_descriptor_set_layout;
+  set_layouts[1] = lime_pipelines.voxel_block_descriptor_set_layout;
+  create_info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+  create_info.pNext = NULL;
+  create_info.flags = 0;
+  create_info.setLayoutCount = 2;
+  create_info.pSetLayouts = set_layouts;
+  create_info.pushConstantRangeCount = 0;
+  create_info.pPushConstantRanges = NULL;
+  assert(lime_pipelines.voxel_block_pipeline_layout == VK_NULL_HANDLE);
+  err = vkCreatePipelineLayout(lime_device.device, &create_info, NULL,
+      &lime_pipelines.voxel_block_pipeline_layout);
+  ASSERT_VK_RESULT(err, "creating voxel block pipeline layout");
 }
 
 static VkShaderModule
@@ -191,171 +243,182 @@ create_shader_module(const char *file_name)
 }
 
 static void
-create_pipeline(void)
+init_default_pipeline_states(struct pipeline_create_info *info)
 {
-  VkPipelineShaderStageCreateInfo shader_stages[2];
-  VkVertexInputBindingDescription vertex_input_bindings[1];
-  VkVertexInputAttributeDescription vertex_input_attributes[3];
-  VkPipelineVertexInputStateCreateInfo vertex_input;
-  VkPipelineInputAssemblyStateCreateInfo input_assembly;
-  VkPipelineViewportStateCreateInfo viewport_state;
-  VkPipelineRasterizationStateCreateInfo rasterization;
-  VkPipelineMultisampleStateCreateInfo multisample;
-  VkPipelineDepthStencilStateCreateInfo depth_stencil;
-  VkPipelineColorBlendAttachmentState color_blend_attachments[1];
-  VkPipelineColorBlendStateCreateInfo color_blend;
-  VkDynamicState dynamic_states[2];
-  VkPipelineDynamicStateCreateInfo dynamic_state;
-  VkGraphicsPipelineCreateInfo create_info;
-  VkResult err;
+  int i;
+  for (i = 0; i < sizeof(info->shader_stages) / sizeof(info->shader_stages[0]); i++) {
+    info->shader_stages[i].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    info->shader_stages[i].pNext = NULL;
+    info->shader_stages[i].flags = 0;
+    info->shader_stages[i].stage = 0;
+    info->shader_stages[i].module = VK_NULL_HANDLE;
+    info->shader_stages[i].pName = "main";
+    info->shader_stages[i].pSpecializationInfo = NULL;
+  }
+  memset(info->vertex_input_bindings, 0, sizeof(info->vertex_input_bindings));
+  memset(info->vertex_input_attributes, 0, sizeof(info->vertex_input_attributes));
 
-  shader_stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  shader_stages[0].pNext = NULL;
-  shader_stages[0].flags = 0;
-  shader_stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
-  shader_stages[0].module = hello_vert_module;
-  shader_stages[0].pName = "main";
-  shader_stages[0].pSpecializationInfo = NULL;
-  shader_stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-  shader_stages[1].pNext = NULL;
-  shader_stages[1].flags = 0;
-  shader_stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
-  shader_stages[1].module = hello_frag_module;
-  shader_stages[1].pName = "main";
-  shader_stages[1].pSpecializationInfo = NULL;
+  info->vertex_input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+  info->vertex_input.pNext = NULL;
+  info->vertex_input.flags = 0;
+  info->vertex_input.vertexBindingDescriptionCount = 0;
+  info->vertex_input.pVertexBindingDescriptions = info->vertex_input_bindings;
+  info->vertex_input.vertexAttributeDescriptionCount = 0;
+  info->vertex_input.pVertexAttributeDescriptions = info->vertex_input_attributes;
 
-  vertex_input_bindings[0].binding = 0;
-  vertex_input_bindings[0].stride = sizeof(struct vertex);
-  vertex_input_bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-  vertex_input_attributes[0].location = 0;
-  vertex_input_attributes[0].binding = 0;
-  vertex_input_attributes[0].format = VK_FORMAT_R32G32B32_SFLOAT;
-  vertex_input_attributes[0].offset = offsetof(struct vertex, pos);
-  vertex_input_attributes[1].location = 1;
-  vertex_input_attributes[1].binding = 0;
-  vertex_input_attributes[1].format = VK_FORMAT_R32G32_SFLOAT;
-  vertex_input_attributes[1].offset = offsetof(struct vertex, uv);
-  vertex_input_attributes[2].location = 2;
-  vertex_input_attributes[2].binding = 0;
-  vertex_input_attributes[2].format = VK_FORMAT_R32G32B32_SFLOAT;
-  vertex_input_attributes[2].offset = offsetof(struct vertex, normal);
+  info->input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+  info->input_assembly.pNext = NULL;
+  info->input_assembly.flags = 0;
+  info->input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+  info->input_assembly.primitiveRestartEnable = VK_FALSE;
 
-  vertex_input.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-  vertex_input.pNext = NULL;
-  vertex_input.flags = 0;
-  vertex_input.vertexBindingDescriptionCount = sizeof(vertex_input_bindings) / sizeof(vertex_input_bindings[0]);
-  vertex_input.pVertexBindingDescriptions = vertex_input_bindings;
-  vertex_input.vertexAttributeDescriptionCount = sizeof(vertex_input_attributes) / sizeof(vertex_input_attributes[0]);
-  vertex_input.pVertexAttributeDescriptions = vertex_input_attributes;
+  info->viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+  info->viewport_state.pNext = NULL;
+  info->viewport_state.flags = 0;
+  info->viewport_state.viewportCount = 1;
+  info->viewport_state.pViewports = NULL;
+  info->viewport_state.scissorCount = 1;
+  info->viewport_state.pScissors = NULL;
 
-  input_assembly.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-  input_assembly.pNext = NULL;
-  input_assembly.flags = 0;
-  input_assembly.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
-  input_assembly.primitiveRestartEnable = VK_FALSE;
+  info->rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+  info->rasterization.pNext = NULL;
+  info->rasterization.flags = 0;
+  info->rasterization.depthClampEnable = VK_FALSE;
+  info->rasterization.rasterizerDiscardEnable = VK_FALSE;
+  info->rasterization.polygonMode = VK_POLYGON_MODE_FILL;
+  info->rasterization.cullMode = VK_CULL_MODE_BACK_BIT;
+  info->rasterization.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+  info->rasterization.depthBiasEnable = VK_FALSE;
+  info->rasterization.depthBiasConstantFactor = 0.0f;
+  info->rasterization.depthBiasClamp = 0.0f;
+  info->rasterization.depthBiasSlopeFactor = 0.0f;
+  info->rasterization.lineWidth = 1.0f;
 
-  viewport_state.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
-  viewport_state.pNext = NULL;
-  viewport_state.flags = 0;
-  viewport_state.viewportCount = 1;
-  viewport_state.pViewports = NULL;
-  viewport_state.scissorCount = 1;
-  viewport_state.pScissors = NULL;
+  info->multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+  info->multisample.pNext = NULL;
+  info->multisample.flags = 0;
+  info->multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+  info->multisample.sampleShadingEnable = VK_FALSE;
+  info->multisample.minSampleShading = 0.0f;
+  info->multisample.pSampleMask = NULL;
+  info->multisample.alphaToCoverageEnable = VK_FALSE;
+  info->multisample.alphaToOneEnable = VK_FALSE;
 
-  rasterization.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-  rasterization.pNext = NULL;
-  rasterization.flags = 0;
-  rasterization.depthClampEnable = VK_FALSE;
-  rasterization.rasterizerDiscardEnable = VK_FALSE;
-  rasterization.polygonMode = VK_POLYGON_MODE_FILL;
-  rasterization.cullMode = VK_CULL_MODE_BACK_BIT;
-  rasterization.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
-  rasterization.depthBiasEnable = VK_FALSE;
-  rasterization.depthBiasConstantFactor = 0.0f;
-  rasterization.depthBiasClamp = 0.0f;
-  rasterization.depthBiasSlopeFactor = 0.0f;
-  rasterization.lineWidth = 1.0f;
+  info->depth_stencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
+  info->depth_stencil.pNext = NULL;
+  info->depth_stencil.flags = 0;
+  info->depth_stencil.depthTestEnable = VK_TRUE;
+  info->depth_stencil.depthWriteEnable = VK_TRUE;
+  info->depth_stencil.depthCompareOp = VK_COMPARE_OP_LESS;
+  info->depth_stencil.depthBoundsTestEnable = VK_FALSE;
+  info->depth_stencil.stencilTestEnable = VK_FALSE;
+  memset(&info->depth_stencil.front, 0, sizeof(info->depth_stencil.front));
+  memset(&info->depth_stencil.back, 0, sizeof(info->depth_stencil.front));
+  info->depth_stencil.minDepthBounds = 0.0f;
+  info->depth_stencil.maxDepthBounds = 1.0f;
 
-  multisample.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-  multisample.pNext = NULL;
-  multisample.flags = 0;
-  multisample.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-  multisample.sampleShadingEnable = VK_FALSE;
-  multisample.minSampleShading = 0.0f;
-  multisample.pSampleMask = NULL;
-  multisample.alphaToCoverageEnable = VK_FALSE;
-  multisample.alphaToOneEnable = VK_FALSE;
-
-  depth_stencil.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-  depth_stencil.pNext = NULL;
-  depth_stencil.flags = 0;
-  depth_stencil.depthTestEnable = VK_TRUE;
-  depth_stencil.depthWriteEnable = VK_TRUE;
-  depth_stencil.depthCompareOp = VK_COMPARE_OP_LESS;
-  depth_stencil.depthBoundsTestEnable = VK_FALSE;
-  depth_stencil.stencilTestEnable = VK_FALSE;
-  memset(&depth_stencil.front, 0, sizeof(depth_stencil.front));
-  memset(&depth_stencil.back, 0, sizeof(depth_stencil.front));
-  depth_stencil.minDepthBounds = 0.0f;
-  depth_stencil.maxDepthBounds = 1.0f;
-
-  color_blend_attachments[0].blendEnable = VK_FALSE;
-  color_blend_attachments[0].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
-  color_blend_attachments[0].dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
-  color_blend_attachments[0].colorBlendOp = VK_BLEND_OP_ADD;
-  color_blend_attachments[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
-  color_blend_attachments[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
-  color_blend_attachments[0].alphaBlendOp = VK_BLEND_OP_ADD;
-  color_blend_attachments[0].colorWriteMask
+  info->color_blend_attachments[0].blendEnable = VK_FALSE;
+  info->color_blend_attachments[0].srcColorBlendFactor = VK_BLEND_FACTOR_ONE;
+  info->color_blend_attachments[0].dstColorBlendFactor = VK_BLEND_FACTOR_ZERO;
+  info->color_blend_attachments[0].colorBlendOp = VK_BLEND_OP_ADD;
+  info->color_blend_attachments[0].srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+  info->color_blend_attachments[0].dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO;
+  info->color_blend_attachments[0].alphaBlendOp = VK_BLEND_OP_ADD;
+  info->color_blend_attachments[0].colorWriteMask
     = VK_COLOR_COMPONENT_R_BIT
     | VK_COLOR_COMPONENT_G_BIT
     | VK_COLOR_COMPONENT_B_BIT
     | VK_COLOR_COMPONENT_A_BIT;
 
-  color_blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
-  color_blend.pNext = NULL;
-  color_blend.flags = 0;
-  color_blend.logicOpEnable = VK_FALSE;
-  color_blend.logicOp = VK_LOGIC_OP_COPY;
-  color_blend.attachmentCount = sizeof(color_blend_attachments) / sizeof(color_blend_attachments[0]);
-  color_blend.pAttachments = color_blend_attachments;
-  color_blend.blendConstants[0] = 0.0f;
-  color_blend.blendConstants[1] = 0.0f;
-  color_blend.blendConstants[2] = 0.0f;
-  color_blend.blendConstants[3] = 0.0f;
+  info->color_blend.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+  info->color_blend.pNext = NULL;
+  info->color_blend.flags = 0;
+  info->color_blend.logicOpEnable = VK_FALSE;
+  info->color_blend.logicOp = VK_LOGIC_OP_COPY;
+  info->color_blend.attachmentCount = 1;
+  info->color_blend.pAttachments = info->color_blend_attachments;
+  info->color_blend.blendConstants[0] = 0.0f;
+  info->color_blend.blendConstants[1] = 0.0f;
+  info->color_blend.blendConstants[2] = 0.0f;
+  info->color_blend.blendConstants[3] = 0.0f;
 
-  dynamic_states[0] = VK_DYNAMIC_STATE_VIEWPORT;
-  dynamic_states[1] = VK_DYNAMIC_STATE_SCISSOR;
-  dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
-  dynamic_state.pNext = NULL;
-  dynamic_state.flags = 0;
-  dynamic_state.dynamicStateCount = sizeof(dynamic_states) / sizeof(dynamic_states[0]);
-  dynamic_state.pDynamicStates = dynamic_states;
+  info->dynamic_states[0] = VK_DYNAMIC_STATE_VIEWPORT;
+  info->dynamic_states[1] = VK_DYNAMIC_STATE_SCISSOR;
+  info->dynamic_state.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+  info->dynamic_state.pNext = NULL;
+  info->dynamic_state.flags = 0;
+  info->dynamic_state.dynamicStateCount = 2;
+  info->dynamic_state.pDynamicStates = info->dynamic_states;
 
-  create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
-  create_info.pNext = NULL;
-  create_info.flags = 0;
-  create_info.stageCount = sizeof(shader_stages) / sizeof(shader_stages[0]);
-  create_info.pStages = shader_stages;
-  create_info.pVertexInputState = &vertex_input;
-  create_info.pInputAssemblyState = &input_assembly;
-  create_info.pTessellationState = NULL;
-  create_info.pViewportState = &viewport_state;
-  create_info.pRasterizationState = &rasterization;
-  create_info.pMultisampleState = &multisample;
-  create_info.pDepthStencilState = &depth_stencil;
-  create_info.pColorBlendState = &color_blend;
-  create_info.pDynamicState = &dynamic_state;
-  create_info.layout = lime_pipelines.pipeline_layout;
-  create_info.renderPass = lime_pipelines.render_pass;
-  create_info.subpass = 0;
-  create_info.basePipelineHandle = VK_NULL_HANDLE;
-  create_info.basePipelineIndex = 0;
+  info->create_info.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+  info->create_info.pNext = NULL;
+  info->create_info.flags = 0;
+  info->create_info.stageCount = 0;
+  info->create_info.pStages = info->shader_stages;
+  info->create_info.pVertexInputState = &info->vertex_input;
+  info->create_info.pInputAssemblyState = &info->input_assembly;
+  info->create_info.pTessellationState = NULL;
+  info->create_info.pViewportState = &info->viewport_state;
+  info->create_info.pRasterizationState = &info->rasterization;
+  info->create_info.pMultisampleState = &info->multisample;
+  info->create_info.pDepthStencilState = &info->depth_stencil;
+  info->create_info.pColorBlendState = &info->color_blend;
+  info->create_info.pDynamicState = &info->dynamic_state;
+  info->create_info.layout = VK_NULL_HANDLE;
+  info->create_info.renderPass = VK_NULL_HANDLE;
+  info->create_info.subpass = 0;
+  info->create_info.basePipelineHandle = VK_NULL_HANDLE;
+  info->create_info.basePipelineIndex = 0;
+}
 
+static void
+create_pipelines(void)
+{
+  VkResult err;
+  struct pipeline_create_info info;
+
+  init_default_pipeline_states(&info);
+  info.shader_stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+  info.shader_stages[0].module = hello_vert_module;
+  info.shader_stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+  info.shader_stages[1].module = hello_frag_module;
+  info.vertex_input_bindings[0].binding = 0;
+  info.vertex_input_bindings[0].stride = sizeof(struct vertex);
+  info.vertex_input_bindings[0].inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+  info.vertex_input_attributes[0].location = 0;
+  info.vertex_input_attributes[0].binding = 0;
+  info.vertex_input_attributes[0].format = VK_FORMAT_R32G32B32_SFLOAT;
+  info.vertex_input_attributes[0].offset = offsetof(struct vertex, pos);
+  info.vertex_input_attributes[1].location = 1;
+  info.vertex_input_attributes[1].binding = 0;
+  info.vertex_input_attributes[1].format = VK_FORMAT_R32G32_SFLOAT;
+  info.vertex_input_attributes[1].offset = offsetof(struct vertex, uv);
+  info.vertex_input_attributes[2].location = 2;
+  info.vertex_input_attributes[2].binding = 0;
+  info.vertex_input_attributes[2].format = VK_FORMAT_R32G32B32_SFLOAT;
+  info.vertex_input_attributes[2].offset = offsetof(struct vertex, normal);
+  info.vertex_input.vertexBindingDescriptionCount = 1;
+  info.vertex_input.vertexAttributeDescriptionCount = 3;
+  info.create_info.stageCount = 2;
+  info.create_info.layout = lime_pipelines.pipeline_layout;
+  info.create_info.renderPass = lime_pipelines.render_pass;
   assert(lime_pipelines.pipeline == VK_NULL_HANDLE);
   err = vkCreateGraphicsPipelines(lime_device.device, VK_NULL_HANDLE, 1,
-      &create_info, NULL, &lime_pipelines.pipeline);
-  ASSERT_VK_RESULT(err, "creating graphics pipelin");
+      &info.create_info, NULL, &lime_pipelines.pipeline);
+  ASSERT_VK_RESULT(err, "creating graphics pipeline");
+
+  init_default_pipeline_states(&info);
+  info.shader_stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+  info.shader_stages[0].module = voxel_block_vert_module;
+  info.shader_stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+  info.shader_stages[1].module = voxel_block_frag_module;
+  info.create_info.stageCount = 2;
+  info.create_info.layout = lime_pipelines.voxel_block_pipeline_layout;
+  info.create_info.renderPass = lime_pipelines.render_pass;
+  assert(lime_pipelines.voxel_block_pipeline == VK_NULL_HANDLE);
+  err = vkCreateGraphicsPipelines(lime_device.device, VK_NULL_HANDLE, 1,
+      &info.create_info, NULL, &lime_pipelines.voxel_block_pipeline);
+  ASSERT_VK_RESULT(err, "creating voxel block pipeline");
 }
 
 void
@@ -363,22 +426,30 @@ lime_init_pipelines(void)
 {
   create_render_pass();
   create_descriptor_set_layouts();
-  create_pipeline_layout();
+  create_pipeline_layouts();
   hello_vert_module = create_shader_module("hello.vert.spv");
   hello_frag_module = create_shader_module("hello.frag.spv");
-  create_pipeline();
+  voxel_block_vert_module = create_shader_module("voxel_block.vert.spv");
+  voxel_block_frag_module = create_shader_module("voxel_block.frag.spv");
+  create_pipelines();
 }
 
 void
 lime_destroy_pipelines(void)
 {
   vkDestroyPipeline(lime_device.device, lime_pipelines.pipeline, NULL);
+  vkDestroyPipeline(lime_device.device, lime_pipelines.voxel_block_pipeline, NULL);
   vkDestroyShaderModule(lime_device.device, hello_vert_module, NULL);
   vkDestroyShaderModule(lime_device.device, hello_frag_module, NULL);
+  vkDestroyShaderModule(lime_device.device, voxel_block_vert_module, NULL);
+  vkDestroyShaderModule(lime_device.device, voxel_block_frag_module, NULL);
   vkDestroyPipelineLayout(lime_device.device, lime_pipelines.pipeline_layout, NULL);
+  vkDestroyPipelineLayout(lime_device.device, lime_pipelines.voxel_block_pipeline_layout, NULL);
   vkDestroyDescriptorSetLayout(lime_device.device,
       lime_pipelines.camera_descriptor_set_layout, NULL);
   vkDestroyDescriptorSetLayout(lime_device.device,
       lime_pipelines.texture_descriptor_set_layout, NULL);
+  vkDestroyDescriptorSetLayout(lime_device.device,
+      lime_pipelines.voxel_block_descriptor_set_layout, NULL);
   vkDestroyRenderPass(lime_device.device, lime_pipelines.render_pass, NULL);
 }

@@ -41,8 +41,9 @@ struct lime_device {
 struct lime_pipelines {
   VkRenderPass render_pass;
   VkDescriptorSetLayout camera_descriptor_set_layout, texture_descriptor_set_layout;
-  VkPipelineLayout pipeline_layout;
-  VkPipeline pipeline;
+  VkDescriptorSetLayout voxel_block_descriptor_set_layout;
+  VkPipelineLayout pipeline_layout, voxel_block_pipeline_layout;
+  VkPipeline pipeline, voxel_block_pipeline;
 };
 
 struct lime_resources {

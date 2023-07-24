@@ -8,7 +8,7 @@ OBJ=$(patsubst src/%.c, obj/%.o, $(SRC))
 
 .PHONY: all run clean
 
-all: $(OUTPUTNAME) hello.vert.spv hello.frag.spv
+all: $(OUTPUTNAME) hello.vert.spv hello.frag.spv voxel_block.vert.spv voxel_block.frag.spv
 
 $(OUTPUTNAME): $(OBJ)
 	$(CC) $(OBJ) -o $@ $(LDFLAGS)
@@ -23,7 +23,13 @@ hello.vert.spv: shaders/hello.vert
 hello.frag.spv: shaders/hello.frag
 	glslc $< -o $@
 
+voxel_block.vert.spv: shaders/voxel_block.vert
+	glslc $< -o $@
+
+voxel_block.frag.spv: shaders/voxel_block.frag
+	glslc $< -o $@
+
 run: all
 	./$(OUTPUTNAME)
 clean:
-	rm -fr obj $(OUTPUTNAME) hello.vert.spv hello.frag.spv
+	rm -fr obj $(OUTPUTNAME) hello.vert.spv hello.frag.spv voxel_block.vert.spv voxel_block.frag.spv
