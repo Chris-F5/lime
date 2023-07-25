@@ -27,11 +27,19 @@ struct pipeline_create_info {
   VkGraphicsPipelineCreateInfo create_info;
 };
 
-static void create_render_pass(void);
+struct render_pass_create_info {
+  VkAttachmentDescription attachments[2];
+  VkSubpassDependency subpass_dependencies[1];
+  VkSubpassDescription subpass;
+  VkRenderPassCreateInfo create_info;
+};
+
+static void init_default_render_pass_create_info(struct render_pass_create_info *info);
+static void create_render_passes(void);
 static void create_descriptor_set_layouts(void);
 static void create_pipeline_layouts(void);
 static VkShaderModule create_shader_module(const char *file_name);
-static void init_default_pipeline_states(struct pipeline_create_info *info);
+static void init_default_pipeline_create_info(struct pipeline_create_info *info);
 static void create_pipelines(void);
 
 static VkShaderModule hello_vert_module;
@@ -42,78 +50,128 @@ static VkShaderModule voxel_block_frag_module;
 struct lime_pipelines lime_pipelines;
 
 static void
-create_render_pass(void)
+init_default_render_pass_create_info(struct render_pass_create_info *info)
 {
-  VkAttachmentDescription attachments[2];
+  memset(info->attachments, 0, sizeof(info->attachments));
+  memset(info->subpass_dependencies, 0, sizeof(info->subpass_dependencies));
+
+  info->subpass.flags = 0;
+  info->subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
+  info->subpass.inputAttachmentCount = 0;
+  info->subpass.pInputAttachments = NULL;
+  info->subpass.colorAttachmentCount = 0;
+  info->subpass.pColorAttachments = NULL;
+  info->subpass.pResolveAttachments = NULL;
+  info->subpass.pDepthStencilAttachment = NULL;
+  info->subpass.preserveAttachmentCount = 0;
+  info->subpass.pPreserveAttachments = NULL;
+
+  info->create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
+  info->create_info.pNext = NULL;
+  info->create_info.flags = 0;
+  info->create_info.attachmentCount = 0;
+  info->create_info.pAttachments = info->attachments;
+  info->create_info.subpassCount = 1;
+  info->create_info.pSubpasses = &info->subpass;
+  info->create_info.dependencyCount = 0;
+  info->create_info.pDependencies = info->subpass_dependencies;
+}
+
+static void
+create_render_passes(void)
+{
+  struct render_pass_create_info info;
   VkAttachmentReference color_attachments[1];
   VkAttachmentReference depth_attachment;
-  VkSubpassDependency subpass_dependencies[1];
-  VkSubpassDescription subpass;
-  VkRenderPassCreateInfo create_info;
   VkResult err;
 
-  attachments[0].flags = 0;
-  attachments[0].format = lime_device.surface_format.format;
-  attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
-  attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-  attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
-  attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-  attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-
-  attachments[1].flags = 0;
-  attachments[1].format = lime_device.depth_format;
-  attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
-  attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
-  attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
-  attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
-  attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-  attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
+  init_default_render_pass_create_info(&info);
+  info.attachments[0].format = lime_device.surface_format.format;
+  info.attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+  info.attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  info.attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  info.attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  info.attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  info.attachments[0].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  info.attachments[0].finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  info.attachments[1].format = lime_device.depth_format;
+  info.attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+  info.attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
+  info.attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  info.attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  info.attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  info.attachments[1].initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+  info.attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
   color_attachments[0].attachment = 0;
   color_attachments[0].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
   depth_attachment.attachment = 1;
   depth_attachment.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
-
-  subpass_dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
-  subpass_dependencies[0].dstSubpass = 0;
-  subpass_dependencies[0].srcStageMask 
+  info.subpass_dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+  info.subpass_dependencies[0].dstSubpass = 0;
+  info.subpass_dependencies[0].srcStageMask 
     = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
     | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-  subpass_dependencies[0].dstStageMask
+  info.subpass_dependencies[0].dstStageMask
     = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
-    | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
-  subpass_dependencies[0].srcAccessMask = 0;
-  subpass_dependencies[0].dstAccessMask
+    | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
+    | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+  info.subpass_dependencies[0].srcAccessMask = 0;
+  info.subpass_dependencies[0].dstAccessMask
     = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
     | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
-  subpass_dependencies[0].dependencyFlags = 0;
-
-  subpass.flags = 0;
-  subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
-  subpass.inputAttachmentCount = 0;
-  subpass.pInputAttachments = NULL;
-  subpass.colorAttachmentCount = sizeof(color_attachments) / sizeof(color_attachments[0]);
-  subpass.pColorAttachments = color_attachments;
-  subpass.pResolveAttachments = NULL;
-  subpass.pDepthStencilAttachment = &depth_attachment;
-  subpass.preserveAttachmentCount = 0;
-  subpass.pPreserveAttachments = NULL;
-
-  create_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-  create_info.pNext = NULL;
-  create_info.flags = 0;
-  create_info.attachmentCount = sizeof(attachments) / sizeof(attachments[0]);
-  create_info.pAttachments = attachments;
-  create_info.subpassCount = 1;
-  create_info.pSubpasses = &subpass;
-  create_info.dependencyCount = sizeof(subpass_dependencies) / sizeof(subpass_dependencies[0]);
-  create_info.pDependencies = subpass_dependencies;
+  info.subpass.colorAttachmentCount = 1;
+  info.subpass.pColorAttachments = color_attachments;
+  info.subpass.pDepthStencilAttachment = &depth_attachment;
+  info.create_info.attachmentCount = 2;
+  info.create_info.dependencyCount = 1;
   assert(lime_pipelines.render_pass == VK_NULL_HANDLE);
-  err = vkCreateRenderPass(lime_device.device, &create_info, NULL, &lime_pipelines.render_pass);
+  err = vkCreateRenderPass(lime_device.device, &info.create_info, NULL, &lime_pipelines.render_pass);
   ASSERT_VK_RESULT(err, "creating render pass");
+
+  init_default_render_pass_create_info(&info);
+  info.attachments[0].format = lime_device.surface_format.format;
+  info.attachments[0].samples = VK_SAMPLE_COUNT_1_BIT;
+  info.attachments[0].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+  info.attachments[0].storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+  info.attachments[0].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  info.attachments[0].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  info.attachments[0].initialLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  info.attachments[0].finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+  info.attachments[1].format = lime_device.depth_format;
+  info.attachments[1].samples = VK_SAMPLE_COUNT_1_BIT;
+  info.attachments[1].loadOp = VK_ATTACHMENT_LOAD_OP_LOAD;
+  info.attachments[1].storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  info.attachments[1].stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+  info.attachments[1].stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+  info.attachments[1].initialLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+  info.attachments[1].finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+  color_attachments[0].attachment = 0;
+  color_attachments[0].layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+  depth_attachment.attachment = 1;
+  depth_attachment.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
+  info.subpass_dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+  info.subpass_dependencies[0].dstSubpass = 0;
+  info.subpass_dependencies[0].srcStageMask 
+    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+    | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+  info.subpass_dependencies[0].dstStageMask
+    = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT
+    | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT
+    | VK_PIPELINE_STAGE_LATE_FRAGMENT_TESTS_BIT;
+  info.subpass_dependencies[0].srcAccessMask = 0;
+  info.subpass_dependencies[0].dstAccessMask
+    = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT
+    | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_READ_BIT
+    | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
+  info.subpass.colorAttachmentCount = 1;
+  info.subpass.pColorAttachments = color_attachments;
+  info.subpass.pDepthStencilAttachment = &depth_attachment;
+  info.create_info.attachmentCount = 2;
+  info.create_info.dependencyCount = 1;
+  assert(lime_pipelines.voxel_block_render_pass == VK_NULL_HANDLE);
+  err = vkCreateRenderPass(lime_device.device, &info.create_info, NULL,
+      &lime_pipelines.voxel_block_render_pass);
+  ASSERT_VK_RESULT(err, "creating voxel block render pass");
 }
 
 static void
@@ -243,7 +301,7 @@ create_shader_module(const char *file_name)
 }
 
 static void
-init_default_pipeline_states(struct pipeline_create_info *info)
+init_default_pipeline_create_info(struct pipeline_create_info *info)
 {
   int i;
   for (i = 0; i < sizeof(info->shader_stages) / sizeof(info->shader_stages[0]); i++) {
@@ -377,7 +435,7 @@ create_pipelines(void)
   VkResult err;
   struct pipeline_create_info info;
 
-  init_default_pipeline_states(&info);
+  init_default_pipeline_create_info(&info);
   info.shader_stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
   info.shader_stages[0].module = hello_vert_module;
   info.shader_stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -407,14 +465,14 @@ create_pipelines(void)
       &info.create_info, NULL, &lime_pipelines.pipeline);
   ASSERT_VK_RESULT(err, "creating graphics pipeline");
 
-  init_default_pipeline_states(&info);
+  init_default_pipeline_create_info(&info);
   info.shader_stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
   info.shader_stages[0].module = voxel_block_vert_module;
   info.shader_stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
   info.shader_stages[1].module = voxel_block_frag_module;
   info.create_info.stageCount = 2;
   info.create_info.layout = lime_pipelines.voxel_block_pipeline_layout;
-  info.create_info.renderPass = lime_pipelines.render_pass;
+  info.create_info.renderPass = lime_pipelines.voxel_block_render_pass;
   assert(lime_pipelines.voxel_block_pipeline == VK_NULL_HANDLE);
   err = vkCreateGraphicsPipelines(lime_device.device, VK_NULL_HANDLE, 1,
       &info.create_info, NULL, &lime_pipelines.voxel_block_pipeline);
@@ -424,7 +482,7 @@ create_pipelines(void)
 void
 lime_init_pipelines(void)
 {
-  create_render_pass();
+  create_render_passes();
   create_descriptor_set_layouts();
   create_pipeline_layouts();
   hello_vert_module = create_shader_module("hello.vert.spv");
@@ -452,4 +510,5 @@ lime_destroy_pipelines(void)
   vkDestroyDescriptorSetLayout(lime_device.device,
       lime_pipelines.voxel_block_descriptor_set_layout, NULL);
   vkDestroyRenderPass(lime_device.device, lime_pipelines.render_pass, NULL);
+  vkDestroyRenderPass(lime_device.device, lime_pipelines.voxel_block_render_pass, NULL);
 }

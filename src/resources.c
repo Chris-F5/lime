@@ -178,7 +178,6 @@ create_framebuffers(void)
   create_info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
   create_info.pNext = NULL;
   create_info.flags = 0;
-  create_info.renderPass = lime_pipelines.render_pass;
   create_info.attachmentCount = sizeof(attachments) / sizeof(attachments[0]);
   create_info.pAttachments = attachments;
   create_info.width = lime_resources.swapchain_extent.width;
@@ -186,10 +185,16 @@ create_framebuffers(void)
   create_info.layers = 1;
   for (i = 0; i < lime_resources.swapchain_image_count; i++) {
     attachments[0] = swapchain_image_views[i];
+    create_info.renderPass = lime_pipelines.render_pass;
     assert(lime_resources.swapchain_framebuffers[i] == VK_NULL_HANDLE);
     err = vkCreateFramebuffer(lime_device.device, &create_info, NULL,
         &lime_resources.swapchain_framebuffers[i]);
-    ASSERT_VK_RESULT(err, "creating swapcahin framebuffer");
+    ASSERT_VK_RESULT(err, "creating swapchain framebuffer");
+    create_info.renderPass = lime_pipelines.voxel_block_render_pass;
+    assert(lime_resources.voxel_block_framebuffers[i] == VK_NULL_HANDLE);
+    err = vkCreateFramebuffer(lime_device.device, &create_info, NULL,
+        &lime_resources.voxel_block_framebuffers[i]);
+    ASSERT_VK_RESULT(err, "creating voxel block framebuffer");
   }
 }
 
@@ -338,6 +343,7 @@ lime_destroy_resources(void)
   vkFreeMemory(lime_device.device, depth_image_memory, NULL);
   for (i = 0; i < lime_resources.swapchain_image_count; i++) {
     vkDestroyFramebuffer(lime_device.device, lime_resources.swapchain_framebuffers[i], NULL);
+    vkDestroyFramebuffer(lime_device.device, lime_resources.voxel_block_framebuffers[i], NULL);
     vkDestroyImageView(lime_device.device, swapchain_image_views[i], NULL);
   }
   vkDestroySwapchainKHR(lime_device.device, lime_resources.swapchain, NULL);

@@ -94,6 +94,17 @@ record_command_buffer(VkCommandBuffer command_buffer, int swap_index)
   err = vkBeginCommandBuffer(command_buffer, &begin_info);
   ASSERT_VK_RESULT(err, "begining command buffer");
 
+  viewport.x = viewport.y = 0.0f;
+  viewport.width = lime_resources.swapchain_extent.width;
+  viewport.height = lime_resources.swapchain_extent.height;
+  viewport.minDepth = 0.0f;
+  viewport.maxDepth = 1.0f;
+  scissor.offset.x = scissor.offset.y = 0;
+  scissor.extent = lime_resources.swapchain_extent;
+
+  vkCmdSetViewport(command_buffer, 0, 1, &viewport);
+  vkCmdSetScissor(command_buffer, 0, 1, &scissor);
+
   assert(lime_device.surface_format.format == VK_FORMAT_B8G8R8A8_SRGB);
   clear_values[0].color.float32[0] = powf(128.0f / 255.0, 2.4f);
   clear_values[0].color.float32[1] = powf(218.0f / 255.0, 2.4f);
@@ -101,7 +112,6 @@ record_command_buffer(VkCommandBuffer command_buffer, int swap_index)
   clear_values[0].color.float32[3] = 1.0f;
   clear_values[1].depthStencil.depth = 1.0f;
   clear_values[1].depthStencil.stencil = 0;
-
   render_pass_info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
   render_pass_info.pNext = NULL;
   render_pass_info.renderPass = lime_pipelines.render_pass;
@@ -111,15 +121,6 @@ record_command_buffer(VkCommandBuffer command_buffer, int swap_index)
   render_pass_info.renderArea.extent = lime_resources.swapchain_extent;
   render_pass_info.clearValueCount = sizeof(clear_values) / sizeof(clear_values[0]);
   render_pass_info.pClearValues = clear_values;
-
-  viewport.x = viewport.y = 0.0f;
-  viewport.width = lime_resources.swapchain_extent.width;
-  viewport.height = lime_resources.swapchain_extent.height;
-  viewport.minDepth = 0.0f;
-  viewport.maxDepth = 1.0f;
-  scissor.offset.x = scissor.offset.y = 0;
-  scissor.extent = lime_resources.swapchain_extent;
-
   vkCmdBeginRenderPass(command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
   vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lime_pipelines.pipeline);
   vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -131,10 +132,24 @@ record_command_buffer(VkCommandBuffer command_buffer, int swap_index)
   vkCmdBindVertexBuffers(command_buffer, 0, 1, &lime_vertex_buffers.vertex_buffer,
       &(VkDeviceSize){0});
   vkCmdBindIndexBuffer(command_buffer, lime_vertex_buffers.index_buffer, 0, VK_INDEX_TYPE_UINT32);
-  vkCmdSetViewport(command_buffer, 0, 1, &viewport);
-  vkCmdSetScissor(command_buffer, 0, 1, &scissor);
   vkCmdDrawIndexed(command_buffer, lime_vertex_buffers.index_count, 1, 0, 0, 0);
   vkCmdEndRenderPass(command_buffer);
+
+  render_pass_info.renderPass = lime_pipelines.voxel_block_render_pass;
+  render_pass_info.framebuffer = lime_resources.voxel_block_framebuffers[swap_index];
+  render_pass_info.clearValueCount = 0;
+  render_pass_info.pClearValues = NULL;
+  vkCmdBeginRenderPass(command_buffer, &render_pass_info, VK_SUBPASS_CONTENTS_INLINE);
+  vkCmdBindPipeline(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, lime_pipelines.voxel_block_pipeline);
+  vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+      lime_pipelines.voxel_block_pipeline_layout, 0, 1,
+      &lime_resources.camera_descriptor_sets[swap_index], 0, NULL);
+  vkCmdBindDescriptorSets(command_buffer, VK_PIPELINE_BIND_POINT_GRAPHICS,
+      lime_pipelines.voxel_block_pipeline_layout, 1, 1,
+      &lime_voxel_blocks.descriptor_set, 0, NULL);
+  vkCmdDraw(command_buffer, 36, 1, 0, 0);
+  vkCmdEndRenderPass(command_buffer);
+
   err = vkEndCommandBuffer(command_buffer);
   ASSERT_VK_RESULT(err, "recording command buffer");
 }

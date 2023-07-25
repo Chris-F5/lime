@@ -47,6 +47,7 @@ main(int argc, char **argv)
   voxels = xmalloc(block_size * block_size * block_size);
   for (i = 0; i < block_size * block_size * block_size; i++)
     voxels[i] = (i % 10 == 0) ? 1 : 0;
+  mat4_view(block_uniform_data.model, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
 
   lime_init_device(window);
   lime_init_pipelines();
@@ -62,8 +63,8 @@ main(int argc, char **argv)
 
   camera.x = camera.y = camera.z = 0.0f;
   camera.yaw = camera.pitch = 0.0f;
-  mat4_projection(camera_uniform_data.proj, 1, 1.5f, 0.1, 100);
-  mat4_view(camera_uniform_data.model, 3.141592f * 1.5, 0, 0, 0, 0);
+  mat4_projection(camera_uniform_data.proj, 1.0f, 1.5f, 0.1f, 100.0f);
+  mat4_view(camera_uniform_data.model, 3.141592f * 1.5f, 0.0f, 0.0f, 0.0f, 0.0f);
   camera_uniform_data.color = 0;
 
   while (!glfwWindowShouldClose(window)) {

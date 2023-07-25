@@ -43,7 +43,7 @@ struct lime_device {
 };
 
 struct lime_pipelines {
-  VkRenderPass render_pass;
+  VkRenderPass render_pass, voxel_block_render_pass;
   VkDescriptorSetLayout camera_descriptor_set_layout, texture_descriptor_set_layout;
   VkDescriptorSetLayout voxel_block_descriptor_set_layout;
   VkPipelineLayout pipeline_layout, voxel_block_pipeline_layout;
@@ -55,6 +55,7 @@ struct lime_resources {
   uint32_t swapchain_image_count;
   VkExtent2D swapchain_extent;
   VkFramebuffer swapchain_framebuffers[MAX_SWAPCHAIN_IMAGES];
+  VkFramebuffer voxel_block_framebuffers[MAX_SWAPCHAIN_IMAGES];
   VkDescriptorSet camera_descriptor_sets[MAX_SWAPCHAIN_IMAGES];
 };
 
