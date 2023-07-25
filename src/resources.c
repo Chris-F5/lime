@@ -233,6 +233,7 @@ allocate_buffers(void)
   ASSERT_VK_RESULT(err, "allocating camera uniform buffer memory");
   err = vkBindBufferMemory(lime_device.device, camera_uniform_buffer,
       camera_uniform_buffer_memory, 0);
+  ASSERT_VK_RESULT(err, "binding camera uniform buffer memory");
 }
 
 static void

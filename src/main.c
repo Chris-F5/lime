@@ -31,6 +31,9 @@ main(int argc, char **argv)
   struct indexed_vertex_obj ivo;
   struct camera camera;
   struct camera_uniform_data camera_uniform_data;
+  struct voxel_block_uniform_data block_uniform_data;
+  int block_size, i;
+  char *voxels;
 
   glfwSetErrorCallback(glfw_error_callback);
   glfwInit();
@@ -40,16 +43,22 @@ main(int argc, char **argv)
 
   load_wavefront_obj(&wavefront, "viking_room.obj");
   wavefront_to_indexed_vertex_obj(&ivo, &wavefront);
+  block_size = 16;
+  voxels = xmalloc(block_size * block_size * block_size);
+  for (i = 0; i < block_size * block_size * block_size; i++)
+    voxels[i] = (i % 10 == 0) ? 1 : 0;
 
   lime_init_device(window);
   lime_init_pipelines();
   lime_init_resources();
   lime_init_vertex_buffers(&ivo);
   lime_init_textures("viking_room.png");
+  lime_init_voxel_blocks(block_uniform_data, block_size, voxels);
   lime_init_renderer();
 
   destroy_wavefront_obj(&wavefront);
   destroy_indexed_vertex_obj(&ivo);
+  free(voxels);
 
   camera.x = camera.y = camera.z = 0.0f;
   camera.yaw = camera.pitch = 0.0f;
@@ -66,6 +75,7 @@ main(int argc, char **argv)
   }
   vkDeviceWaitIdle(lime_device.device);
   lime_destroy_renderer();
+  lime_destroy_voxel_blocks();
   lime_destroy_textures();
   lime_destroy_vertex_buffers();
   lime_destroy_resources();

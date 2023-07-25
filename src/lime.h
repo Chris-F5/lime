@@ -27,6 +27,10 @@ struct camera_uniform_data {
   int color;
 };
 
+struct voxel_block_uniform_data {
+  mat4 model;
+};
+
 struct lime_device {
   VkSurfaceKHR surface;
   VkPhysicalDeviceProperties properties;
@@ -64,11 +68,16 @@ struct lime_textures {
   VkDescriptorSet texture_descriptor_set;
 };
 
+struct lime_voxel_blocks {
+  VkDescriptorSet descriptor_set;
+};
+
 extern struct lime_device lime_device;
 extern struct lime_pipelines lime_pipelines;
 extern struct lime_resources lime_resources;
 extern struct lime_vertex_buffers lime_vertex_buffers;
 extern struct lime_textures lime_textures;
+extern struct lime_voxel_blocks lime_voxel_blocks;
 
 /* device.c */
 void lime_init_device(GLFWwindow *window);
@@ -93,6 +102,11 @@ void lime_destroy_vertex_buffers(void);
 /* textures.c */
 void lime_init_textures(const char *fname);
 void lime_destroy_textures(void);
+
+/* voxel_blocks.c */
+void lime_init_voxel_blocks(struct voxel_block_uniform_data uniform_data, int size,
+    const char *voxels);
+void lime_destroy_voxel_blocks(void);
 
 /* renderer.c */
 void lime_init_renderer(void);

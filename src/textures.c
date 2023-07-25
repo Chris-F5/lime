@@ -11,6 +11,8 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
 
+#define TEXTURE_IMAGE_FORMAT VK_FORMAT_R8G8B8A8_SRGB
+
 static void create_transfer_command_pool(void);
 static void allocate_staging_buffer(VkDeviceSize size);
 static void allocate_texture_image(int width, int height, VkImage *image,
@@ -20,7 +22,7 @@ static void init_texture_image(int width, int height, const stbi_uc *pixels,
 static void create_texture_sampler(VkSampler *sampler);
 static void create_texture_descriptor_pool(void);
 static void allocate_texture_descriptor_set(void);
-static void bind_texture_descriptor_set(VkSampler sampler, VkImageView view);
+static void write_texture_descriptor_set(VkSampler sampler, VkImageView view);
 
 static VkCommandPool transfer_command_pool;
 static VkDeviceSize staging_buffer_size;
@@ -99,7 +101,7 @@ allocate_texture_image(int width, int height, VkImage *image, VkDeviceMemory *me
   create_info.flags = 0;
   create_info.imageType = VK_IMAGE_TYPE_2D;
   /* TODO: Check format supported. */
-  create_info.format = VK_FORMAT_R8G8B8A8_SRGB;
+  create_info.format = TEXTURE_IMAGE_FORMAT;
   create_info.extent.width = width;
   create_info.extent.height = height;
   create_info.extent.depth = 1;
@@ -133,7 +135,7 @@ allocate_texture_image(int width, int height, VkImage *image, VkDeviceMemory *me
   view_create_info.flags = 0;
   view_create_info.image = *image;
   view_create_info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-  view_create_info.format = VK_FORMAT_R8G8B8A8_SRGB;
+  view_create_info.format = TEXTURE_IMAGE_FORMAT;
   view_create_info.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
   view_create_info.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
   view_create_info.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
@@ -232,7 +234,8 @@ init_texture_image(int width, int height, const stbi_uc *pixels, VkImage image)
       VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
       0, 0, NULL, 0, NULL, 1, &barrier);
 
-  vkEndCommandBuffer(command_buffer);
+  err = vkEndCommandBuffer(command_buffer);
+  ASSERT_VK_RESULT(err, "ending texture transfer command buffer");
 
   submit_info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
   submit_info.pNext = NULL;
@@ -318,7 +321,7 @@ allocate_texture_descriptor_set(void)
 }
 
 static void
-bind_texture_descriptor_set(VkSampler sampler, VkImageView view)
+write_texture_descriptor_set(VkSampler sampler, VkImageView view)
 {
   VkDescriptorImageInfo image_info;
   VkWriteDescriptorSet write;
@@ -358,7 +361,7 @@ lime_init_textures(const char *fname)
   create_texture_sampler(&texture_sampler);
   create_texture_descriptor_pool();
   allocate_texture_descriptor_set();
-  bind_texture_descriptor_set(texture_sampler, texture_image_view);
+  write_texture_descriptor_set(texture_sampler, texture_image_view);
 
   stbi_image_free(pixels);
 }
