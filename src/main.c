@@ -47,7 +47,8 @@ main(int argc, char **argv)
   voxels = xmalloc(block_size * block_size * block_size);
   for (i = 0; i < block_size * block_size * block_size; i++)
     voxels[i] = (i % 10 == 0) ? 1 : 0;
-  mat4_view(block_uniform_data.model, 0.0f, 0.0f, 0.0f, 0.0f, 0.0f);
+  mat4_view(block_uniform_data.model, 0.0f, 0.0f, -0.4f, 0.0f, -0.55f);
+  block_uniform_data.scale = 16;
 
   lime_init_device(window);
   lime_init_pipelines();

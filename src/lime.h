@@ -29,6 +29,7 @@ struct camera_uniform_data {
 
 struct voxel_block_uniform_data {
   mat4 model;
+  int scale;
 };
 
 struct lime_device {
