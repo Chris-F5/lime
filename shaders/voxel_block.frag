@@ -22,6 +22,15 @@ struct HitData {
   vec3 normal;
 };
 
+const float mat_specular = 1.0f;
+const float mat_diffuse = 0.3f;
+const float mat_ambient = 0.3f;
+const float mat_shininess = 4.0f;
+
+const vec3 light_dir = normalize(vec3(1.0f, -2.0f, 0.5f));
+const float light_specular = 0.5f;
+const float light_diffuse = 0.9f;
+
 HitData
 trace_ray(vec3 origin, vec3 dir)
 {
@@ -140,6 +149,19 @@ trace_ray(vec3 origin, vec3 dir)
 }
 
 float
+compute_illumination(vec3 normal, vec3 viewer)
+{
+  vec3 reflection;
+  float illumination;
+  reflection = 2 * normal * dot(normal, -light_dir) + light_dir;
+  illumination
+    = mat_diffuse * light_diffuse * dot(normal, -light_dir)
+    + mat_specular * light_specular * pow(dot(reflection, viewer), mat_shininess)
+    + mat_ambient;
+  return illumination;
+}
+
+float
 distance_to_depth(float distance)
 {
   return proj[2][2] + proj[3][2] / distance;
@@ -151,13 +173,15 @@ main()
   vec3 cam_pos, cam_dir;
   vec3 ray_dir;
   HitData hit;
+  float illumination;
 
   cam_pos = vec3(inverse(model) * inverse(view) * vec4(0.0f, 0.0f, 0.0f, 1.0f));
   cam_dir = normalize(vec3(inverse(view)[2]));
   ray_dir = normalize(in_pos - cam_pos);
   hit = trace_ray(cam_pos * 16, ray_dir);
   if (hit.voxel != 0) {
-    out_color = vec4(1.0f, 0.0f, 0.0f, 1.0f);
+    illumination = compute_illumination(hit.normal, -ray_dir);
+    out_color = vec4(1.0f, 0.0f, 0.0f, 1.0f) * illumination;
     gl_FragDepth = distance_to_depth(hit.distance / block_scale * dot(cam_dir, ray_dir));
   } else {
     out_color = vec4(0.0f, 1.0f, 0.0f, 1.0f);
