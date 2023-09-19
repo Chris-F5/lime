@@ -9,7 +9,7 @@
 #include "obj_types.h"
 #include "lime.h"
 
-static VkDeviceMemory vertex_buffer_memory, vertex_color_buffer_memory;
+static VkDeviceMemory vertex_buffer_memory;
 static VkDeviceMemory index_buffer_memory;
 
 static void allocate_vertex_buffers(int vertex_count, int index_count);
@@ -107,6 +107,5 @@ lime_destroy_vertex_buffers(void)
   vkDestroyBuffer(lime_device.device, lime_vertex_buffers.vertex_buffer, NULL);
   vkDestroyBuffer(lime_device.device, lime_vertex_buffers.index_buffer, NULL);
   vkFreeMemory(lime_device.device, vertex_buffer_memory, NULL);
-  vkFreeMemory(lime_device.device, vertex_color_buffer_memory, NULL);
   vkFreeMemory(lime_device.device, index_buffer_memory, NULL);
 }
