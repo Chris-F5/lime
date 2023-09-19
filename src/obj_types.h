@@ -15,3 +15,8 @@ struct indexed_vertex_obj {
   struct vertex *vertices;
   uint32_t *indices;
 };
+
+struct graphics_vertex_obj {
+  int vertex_count, index_count;
+  long vertex_offset, index_offset;
+};

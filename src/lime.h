@@ -7,6 +7,7 @@
  * #include <GLFW/glfw3.h>
  * #include "matrix.h"
  * #include "obj_types.h"
+ * #include "block_allocation.h"
  */
 
 #define PRINT_VK_ERROR(err, string) { \
@@ -61,7 +62,8 @@ struct lime_resources {
 };
 
 struct lime_vertex_buffers {
-  int vertex_count, index_count;
+  struct block_allocation_table vertex_table;
+  struct block_allocation_table index_table;
   VkBuffer vertex_buffer;
   VkBuffer index_buffer;
 };
@@ -98,7 +100,10 @@ void set_camera_uniform_data(int swap_index, struct camera_uniform_data data);
 void lime_destroy_resources(void);
 
 /* vertex_buffers.c */
-void lime_init_vertex_buffers(const struct indexed_vertex_obj *ivo);
+void lime_init_vertex_buffers(long vertex_memory, long index_memory);
+void lime_create_graphics_vertex_obj(struct graphics_vertex_obj *gvo,
+    const struct indexed_vertex_obj *ivo);
+void lime_free_graphics_vertex_obj(struct graphics_vertex_obj *gvo);
 void lime_destroy_vertex_buffers(void);
 
 /* textures.c */
@@ -111,7 +116,7 @@ void lime_init_voxel_blocks(struct voxel_block_uniform_data uniform_data, int si
 void lime_destroy_voxel_blocks(void);
 
 /* renderer.c */
-void lime_init_renderer(void);
+void lime_init_renderer(const struct graphics_vertex_obj *gvo);
 void lime_draw_frame(struct camera_uniform_data camera);
 void lime_destroy_renderer(void);
 

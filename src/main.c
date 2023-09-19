@@ -6,6 +6,7 @@
 #include <GLFW/glfw3.h>
 #include "matrix.h"
 #include "obj_types.h"
+#include "block_allocation.h"
 #include "lime.h"
 #include "utils.h"
 #include "camera.h"
@@ -29,6 +30,7 @@ main(int argc, char **argv)
   GLFWwindow *window;
   struct wavefront_obj wavefront;
   struct indexed_vertex_obj ivo;
+  struct graphics_vertex_obj gvo;
   struct camera camera;
   struct camera_uniform_data camera_uniform_data;
   struct voxel_block_uniform_data block_uniform_data;
@@ -53,10 +55,11 @@ main(int argc, char **argv)
   lime_init_device(window);
   lime_init_pipelines();
   lime_init_resources();
-  lime_init_vertex_buffers(&ivo);
+  lime_init_vertex_buffers(32000, 32000);
+  lime_create_graphics_vertex_obj(&gvo, &ivo);
   lime_init_textures("viking_room.png");
   lime_init_voxel_blocks(block_uniform_data, block_size, voxels);
-  lime_init_renderer();
+  lime_init_renderer(&gvo);
 
   destroy_wavefront_obj(&wavefront);
   destroy_indexed_vertex_obj(&ivo);

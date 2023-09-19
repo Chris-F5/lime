@@ -8,6 +8,7 @@
 #include <vulkan/vulkan.h>
 #include "matrix.h"
 #include "obj_types.h"
+#include "block_allocation.h"
 #include "lime.h"
 
 static void create_swapchain(VkSurfaceCapabilitiesKHR surface_capabilities);

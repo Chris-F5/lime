@@ -9,14 +9,16 @@
 #include <GLFW/glfw3.h>
 #include "matrix.h"
 #include "obj_types.h"
+#include "block_allocation.h"
 #include "lime.h"
 #include "utils.h"
 
 static void create_synchronization_objects(void);
 static void create_graphics_command_pool(void);
 static void allocate_command_buffers(void);
-static void record_command_buffer(VkCommandBuffer command_buffer, int swap_index);
-static void record_command_buffers(void);
+static void record_command_buffer(VkCommandBuffer command_buffer,
+    int swap_index, const struct graphics_vertex_obj *gvo);
+static void record_command_buffers(const struct graphics_vertex_obj *gvo);
 
 static VkCommandPool graphics_command_pool;
 static VkCommandBuffer command_buffers[MAX_SWAPCHAIN_IMAGES];
@@ -78,7 +80,8 @@ allocate_command_buffers(void)
 }
 
 static void
-record_command_buffer(VkCommandBuffer command_buffer, int swap_index)
+record_command_buffer(VkCommandBuffer command_buffer, int swap_index,
+    const struct graphics_vertex_obj *gvo)
 {
   VkCommandBufferBeginInfo begin_info;
   VkClearValue clear_values[2];
@@ -132,7 +135,7 @@ record_command_buffer(VkCommandBuffer command_buffer, int swap_index)
   vkCmdBindVertexBuffers(command_buffer, 0, 1, &lime_vertex_buffers.vertex_buffer,
       &(VkDeviceSize){0});
   vkCmdBindIndexBuffer(command_buffer, lime_vertex_buffers.index_buffer, 0, VK_INDEX_TYPE_UINT32);
-  vkCmdDrawIndexed(command_buffer, lime_vertex_buffers.index_count, 1, 0, 0, 0);
+  vkCmdDrawIndexed(command_buffer, gvo->index_count, 1, gvo->index_offset, gvo->vertex_offset, 0);
   vkCmdEndRenderPass(command_buffer);
 
   render_pass_info.renderPass = lime_pipelines.voxel_block_render_pass;
@@ -155,19 +158,19 @@ record_command_buffer(VkCommandBuffer command_buffer, int swap_index)
 }
 
 static void
-record_command_buffers(void)
+record_command_buffers(const struct graphics_vertex_obj *gvo)
 {
   int i;
   for (i = 0; i < lime_resources.swapchain_image_count; i++)
-    record_command_buffer(command_buffers[i], i);
+    record_command_buffer(command_buffers[i], i, gvo);
 }
 
 void
-lime_init_renderer(void)
+lime_init_renderer(const struct graphics_vertex_obj *gvo)
 {
   create_graphics_command_pool();
   allocate_command_buffers();
-  record_command_buffers();
+  record_command_buffers(gvo);
   create_synchronization_objects();
 }
 

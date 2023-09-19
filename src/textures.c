@@ -7,6 +7,7 @@
 #include <GLFW/glfw3.h>
 #include "matrix.h"
 #include "obj_types.h"
+#include "block_allocation.h"
 #include "lime.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb/stb_image.h>
