@@ -20,8 +20,8 @@ static const uint32_t HEIGHT = 800;
 static void
 glfw_error_callback(int _, const char* str)
 {
-    printf("glfw error: '%s'\n", str);
-    exit(1);
+  printf("glfw error: '%s'\n", str);
+  exit(1);
 }
 
 int
